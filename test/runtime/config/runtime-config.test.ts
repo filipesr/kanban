@@ -191,6 +191,24 @@ describe.sequential("runtime-config auto agent selection", () => {
 		}
 	});
 
+	// Hub delivery reaches destinations outside this machine, so it is opt-in. Pinned here
+	// because a default that silently flips to `true` is how a notification feature becomes a
+	// surprise -- and flipping this constant passed every other test in the suite.
+	it("leaves hub notifications off unless asked", async () => {
+		const { path: tempHome, cleanup: cleanupHome } = createTempDir("kanban-home-runtime-config-hub-notify-");
+
+		try {
+			await withTemporaryEnv({ home: tempHome }, async () => {
+				const state = await loadGlobalRuntimeConfig();
+				expect(state.readyForReviewHubNotificationsEnabled).toBe(false);
+				// The browser notification keeps its own default, untouched.
+				expect(state.readyForReviewNotificationsEnabled).toBe(true);
+			});
+		} finally {
+			cleanupHome();
+		}
+	});
+
 	it("loads global runtime config without a project scope", async () => {
 		const { path: tempHome, cleanup: cleanupHome } = createTempDir("kanban-home-runtime-config-global-only-");
 

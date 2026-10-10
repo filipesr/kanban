@@ -2,6 +2,7 @@ import { join } from "node:path";
 
 import { HubUIClient, readHubDiscovery, resolveClineDataDir } from "@clinebot/core";
 import { resolveClineBuildEnv } from "@clinebot/shared";
+import { loadGlobalRuntimeConfig } from "../config/runtime-config";
 
 /**
  * Publishes "a card needs you" to the Cline hub, so any connected subscriber can deliver it.
@@ -28,6 +29,11 @@ export interface ClineHubNotifyClient {
 }
 
 export interface ClineHubNotifierOptions {
+	/**
+	 * Whether hub delivery is on. Opt-in by default: publishing to the hub is new behaviour,
+	 * and new behaviour that turns itself on is how a notification feature becomes a surprise.
+	 */
+	isEnabled?: () => Promise<boolean>;
 	/** Overridable for tests; defaults to reading the hub discovery file written by the CLI. */
 	readDiscovery?: () => Promise<ClineHubDiscoveryRecord | undefined>;
 	/** Overridable for tests; defaults to a real `HubUIClient`. */
@@ -38,6 +44,16 @@ export interface ReadyForReviewNotification {
 	taskId: string;
 	taskTitle: string;
 	workspaceName: string;
+}
+
+async function defaultIsEnabled(): Promise<boolean> {
+	try {
+		const config = await loadGlobalRuntimeConfig();
+		return config.readyForReviewHubNotificationsEnabled === true;
+	} catch {
+		// An unreadable config is not a reason to notify against the user's wishes.
+		return false;
+	}
 }
 
 async function defaultReadDiscovery(): Promise<ClineHubDiscoveryRecord | undefined> {
@@ -66,6 +82,7 @@ function defaultCreateClient(record: Required<ClineHubDiscoveryRecord>): ClineHu
 }
 
 export function createClineHubNotifier(options: ClineHubNotifierOptions = {}) {
+	const isEnabled = options.isEnabled ?? defaultIsEnabled;
 	const readDiscovery = options.readDiscovery ?? defaultReadDiscovery;
 	const createClient = options.createClient ?? defaultCreateClient;
 
@@ -73,6 +90,9 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}) {
 		async notifyReadyForReview(notification: ReadyForReviewNotification): Promise<void> {
 			let client: ClineHubNotifyClient | undefined;
 			try {
+				if (!(await isEnabled())) {
+					return;
+				}
 				const record = await readDiscovery();
 				if (!record?.url || !record.authToken) {
 					// No hub running, or a hub we cannot authenticate against. Both are normal.

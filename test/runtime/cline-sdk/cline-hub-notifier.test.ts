@@ -26,6 +26,7 @@ describe("createClineHubNotifier", () => {
 
 	it("does not throw when sending fails", async () => {
 		const notifier = createClineHubNotifier({
+			isEnabled: async () => true,
 			readDiscovery: async () => ({ url: "ws://127.0.0.1:1/hub", authToken: "tok" }),
 			createClient: () => ({
 				connect: async () => {
@@ -45,6 +46,7 @@ describe("createClineHubNotifier", () => {
 			(payload: { title: string; body: string; severity?: "info" | "warning" | "error" }) => Promise<void>
 		>(async () => undefined);
 		const notifier = createClineHubNotifier({
+			isEnabled: async () => true,
 			readDiscovery: async () => ({ url: "ws://127.0.0.1:1/hub", authToken: "tok" }),
 			createClient: () => ({
 				connect: async () => undefined,
@@ -65,9 +67,45 @@ describe("createClineHubNotifier", () => {
 		expect(payload.body).toContain("partyshare");
 	});
 
+	// The destination is opt-in: publishing to the hub is new behaviour, and new behaviour that
+	// turns itself on is how a notification feature becomes a surprise. Existing users see no
+	// change until they ask for it.
+	it("stays silent when hub delivery is not enabled", async () => {
+		const sendNotify = vi.fn<
+			(payload: { title: string; body: string; severity?: "info" | "warning" | "error" }) => Promise<void>
+		>(async () => undefined);
+		const notifier = createClineHubNotifier({
+			isEnabled: async () => false,
+			readDiscovery: async () => ({ url: "ws://127.0.0.1:1/hub", authToken: "tok" }),
+			createClient: () => ({
+				connect: async () => undefined,
+				sendNotify,
+				dispose: async () => undefined,
+			}),
+		});
+
+		await notifier.notifyReadyForReview({ taskTitle: "t", taskId: "1", workspaceName: "w" });
+		expect(sendNotify).not.toHaveBeenCalled();
+	});
+
+	// A config read that throws must not become a reason to skip the notification *or* a reason
+	// to crash: it is the same accessory contract as everything else here.
+	it("does not throw when reading the setting fails", async () => {
+		const notifier = createClineHubNotifier({
+			isEnabled: async () => {
+				throw new Error("config unreadable");
+			},
+			readDiscovery: async () => ({ url: "ws://127.0.0.1:1/hub", authToken: "tok" }),
+		});
+		await expect(
+			notifier.notifyReadyForReview({ taskTitle: "t", taskId: "1", workspaceName: "w" }),
+		).resolves.toBeUndefined();
+	});
+
 	it("always disposes the client, including when sending throws", async () => {
 		const dispose = vi.fn<() => Promise<void>>(async () => undefined);
 		const notifier = createClineHubNotifier({
+			isEnabled: async () => true,
 			readDiscovery: async () => ({ url: "ws://127.0.0.1:1/hub", authToken: "tok" }),
 			createClient: () => ({
 				connect: async () => undefined,
