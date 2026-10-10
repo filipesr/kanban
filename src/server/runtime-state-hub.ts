@@ -21,6 +21,7 @@ import type {
 	RuntimeTaskSessionSummary,
 } from "../core/api-contract";
 import type { TerminalSessionManager } from "../terminal/session-manager";
+import { shouldNotifyTaskReadyForReview } from "./ready-for-review-notification";
 import { createWorkspaceMetadataMonitor } from "./workspace-metadata-monitor";
 import type { ResolvedWorkspaceStreamTarget, WorkspaceRegistry } from "./workspace-registry";
 
@@ -526,9 +527,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 					previousSummary &&
 					previousSummary.state !== "awaiting_review" &&
 					summary.state === "awaiting_review" &&
-					(summary.reviewReason === "hook" ||
-						summary.reviewReason === "attention" ||
-						summary.reviewReason === "error")
+					shouldNotifyTaskReadyForReview(summary.reviewReason)
 				) {
 					broadcastTaskReadyForReview(workspaceId, summary.taskId);
 				}
