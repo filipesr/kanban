@@ -2,7 +2,9 @@
 // It listens to terminal and native Cline updates, normalizes them into the
 // shared API contract, and fans out workspace-scoped snapshots and deltas.
 import type { IncomingMessage } from "node:http";
+import { basename } from "node:path";
 import { WebSocket, WebSocketServer } from "ws";
+import { createClineHubNotifier } from "../cline-sdk/cline-hub-notifier";
 import type { ClineTaskMessage, ClineTaskSessionService } from "../cline-sdk/cline-task-session-service";
 import type {
 	RuntimeClineMcpServerAuthStatus,
@@ -20,6 +22,7 @@ import type {
 	RuntimeStateStreamWorkspaceStateMessage,
 	RuntimeTaskSessionSummary,
 } from "../core/api-contract";
+import { resolveTaskTitle } from "../core/task-title";
 import type { TerminalSessionManager } from "../terminal/session-manager";
 import { shouldNotifyTaskReadyForReview } from "./ready-for-review-notification";
 import { createWorkspaceMetadataMonitor } from "./workspace-metadata-monitor";
@@ -323,6 +326,42 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 		}
 	};
 
+	const hubNotifier = createClineHubNotifier();
+
+	/**
+	 * Publishes "ready for review" to the Cline hub. Fire-and-forget by contract: it never
+	 * throws, never blocks the card transition, and a hub that is down is a normal condition.
+	 * Resolving the card title is best-effort -- a notification with the task id is still far
+	 * better than no notification, which is what exists today when no tab is open.
+	 */
+	const notifyHubTaskReadyForReview = async (
+		workspaceId: string,
+		workspacePath: string | null,
+		taskId: string,
+	): Promise<void> => {
+		try {
+			let taskTitle = taskId;
+			let workspaceName = workspaceId;
+			if (workspacePath) {
+				try {
+					const snapshot = await deps.workspaceRegistry.buildWorkspaceStateSnapshot(workspaceId, workspacePath);
+					const card = snapshot.board.columns
+						.flatMap((column) => column.cards)
+						.find((entry) => entry.id === taskId);
+					if (card) {
+						taskTitle = resolveTaskTitle(card.title, card.prompt);
+					}
+					workspaceName = basename(workspacePath) || workspaceId;
+				} catch {
+					// Title lookup is a nicety; the notification goes out regardless.
+				}
+			}
+			await hubNotifier.notifyReadyForReview({ taskId, taskTitle, workspaceName });
+		} catch {
+			// Notification is an accessory and must never surface as a board error.
+		}
+	};
+
 	const broadcastTaskReadyForReview = (workspaceId: string, taskId: string) => {
 		const runtimeClients = runtimeStateClientsByWorkspaceId.get(workspaceId);
 		if (!runtimeClients || runtimeClients.size === 0) {
@@ -529,7 +568,13 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 					summary.state === "awaiting_review" &&
 					shouldNotifyTaskReadyForReview(summary.reviewReason)
 				) {
+					// Two destinations, deliberately side by side: the runtime stream reaches
+					// browser tabs, and the Cline hub reaches whoever subscribes to it (the
+					// menubar app today, CLI connectors once they subscribe). The hub call is
+					// NOT inside broadcastTaskReadyForReview because that function returns
+					// early when no tab is open -- which is exactly the case this is for.
 					broadcastTaskReadyForReview(workspaceId, summary.taskId);
+					void notifyHubTaskReadyForReview(workspaceId, summary.workspacePath, summary.taskId);
 				}
 			});
 			clineSummaryUnsubscribeByWorkspaceId.set(workspaceId, unsubscribe);
