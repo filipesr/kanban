@@ -92,7 +92,11 @@ function defaultCreateClient(record: Required<ClineHubDiscoveryRecord>): ClineHu
 	};
 }
 
-export function createClineHubNotifier(options: ClineHubNotifierOptions = {}) {
+export interface ClineHubNotifier {
+	notifyReadyForReview(notification: ReadyForReviewNotification): Promise<void>;
+}
+
+export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): ClineHubNotifier {
 	const isEnabled = options.isEnabled ?? defaultIsEnabled;
 	const readDiscovery = options.readDiscovery ?? defaultReadDiscovery;
 	const createClient = options.createClient ?? defaultCreateClient;

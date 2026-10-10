@@ -4,7 +4,7 @@
 import type { IncomingMessage } from "node:http";
 import { basename } from "node:path";
 import { WebSocket, WebSocketServer } from "ws";
-import { createClineHubNotifier } from "../cline-sdk/cline-hub-notifier";
+import { type ClineHubNotifier, createClineHubNotifier } from "../cline-sdk/cline-hub-notifier";
 import type { ClineTaskMessage, ClineTaskSessionService } from "../cline-sdk/cline-task-session-service";
 import type {
 	RuntimeClineMcpServerAuthStatus,
@@ -38,8 +38,10 @@ export interface DisposeRuntimeStateWorkspaceOptions {
 export interface CreateRuntimeStateHubDependencies {
 	workspaceRegistry: Pick<
 		WorkspaceRegistry,
-		"resolveWorkspaceForStream" | "buildProjectsPayload" | "buildWorkspaceStateSnapshot"
+		"resolveWorkspaceForStream" | "buildProjectsPayload" | "buildWorkspaceStateSnapshot" | "getWorkspacePathById"
 	>;
+	/** Overridable for tests; defaults to the real hub notifier. */
+	hubNotifier?: ClineHubNotifier;
 }
 
 export interface RuntimeStateHub {
@@ -69,6 +71,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 	const clineSummaryUnsubscribeByWorkspaceId = new Map<string, () => void>();
 	const clineMessageUnsubscribeByWorkspaceId = new Map<string, () => void>();
 	const clinePreviousSummaryByWorkspaceId = new Map<string, Map<string, RuntimeTaskSessionSummary>>();
+	const terminalPreviousSummaryByWorkspaceId = new Map<string, Map<string, RuntimeTaskSessionSummary>>();
 	const pendingTaskSessionSummariesByWorkspaceId = new Map<string, Map<string, RuntimeTaskSessionSummary>>();
 	const taskSessionBroadcastTimersByWorkspaceId = new Map<string, NodeJS.Timeout>();
 	const runtimeStateClientsByWorkspaceId = new Map<string, Set<WebSocket>>();
@@ -252,6 +255,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 			}
 		}
 		terminalSummaryUnsubscribeByWorkspaceId.delete(workspaceId);
+		terminalPreviousSummaryByWorkspaceId.delete(workspaceId);
 		const unsubscribeClineSummary = clineSummaryUnsubscribeByWorkspaceId.get(workspaceId);
 		if (unsubscribeClineSummary) {
 			try {
@@ -326,7 +330,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 		}
 	};
 
-	const hubNotifier = createClineHubNotifier();
+	const hubNotifier = deps.hubNotifier ?? createClineHubNotifier();
 
 	/**
 	 * Publishes "ready for review" to the Cline hub. Fire-and-forget by contract: it never
@@ -365,6 +369,41 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 		} catch {
 			// Notification is an accessory and must never surface as a board error.
 		}
+	};
+
+	/**
+	 * One decision point for both agent runtimes. A card entering review must announce itself the
+	 * same way whether it ran through the Cline SDK or a terminal agent -- the human waiting for
+	 * it does not know or care which, and before this existed only the SDK path announced at all.
+	 *
+	 * The announced path is the workspace's REPOSITORY, never `summary.workspacePath`: a card runs
+	 * in a throwaway worktree under ~/.cline/worktrees, and nothing -- no browser tab, no chat
+	 * conversation -- is bound to a worktree, so a notification carrying one is addressed to an
+	 * address that does not exist.
+	 */
+	const handleTaskSessionSummaryTransition = (
+		workspaceId: string,
+		previousSummary: RuntimeTaskSessionSummary | undefined,
+		summary: RuntimeTaskSessionSummary,
+	): void => {
+		if (
+			!previousSummary ||
+			previousSummary.state === "awaiting_review" ||
+			summary.state !== "awaiting_review" ||
+			!shouldNotifyTaskReadyForReview(summary.reviewReason)
+		) {
+			return;
+		}
+		// Two destinations, deliberately side by side: the runtime stream reaches browser tabs,
+		// and the Cline hub reaches whoever subscribes to it (the menubar app, and CLI connectors
+		// once they subscribe). The hub call is NOT inside broadcastTaskReadyForReview because
+		// that function returns early when no tab is open -- exactly the case this is for.
+		broadcastTaskReadyForReview(workspaceId, summary.taskId);
+		void notifyHubTaskReadyForReview(
+			workspaceId,
+			deps.workspaceRegistry.getWorkspacePathById(workspaceId),
+			summary.taskId,
+		);
 	};
 
 	const broadcastTaskReadyForReview = (workspaceId: string, taskId: string) => {
@@ -542,8 +581,16 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 			if (terminalSummaryUnsubscribeByWorkspaceId.has(workspaceId)) {
 				return;
 			}
+			const previousSummariesByTaskId = new Map<string, RuntimeTaskSessionSummary>();
+			terminalPreviousSummaryByWorkspaceId.set(workspaceId, previousSummariesByTaskId);
+			for (const summary of manager.listSummaries()) {
+				previousSummariesByTaskId.set(summary.taskId, summary);
+			}
 			const unsubscribe = manager.onSummary((summary) => {
+				const previousSummary = previousSummariesByTaskId.get(summary.taskId);
+				previousSummariesByTaskId.set(summary.taskId, summary);
 				queueTaskSessionSummaryBroadcast(workspaceId, summary);
+				handleTaskSessionSummaryTransition(workspaceId, previousSummary, summary);
 			});
 			terminalSummaryUnsubscribeByWorkspaceId.set(workspaceId, unsubscribe);
 		},
@@ -567,20 +614,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 				if (didCheckpointChange) {
 					void broadcastRuntimeWorkspaceStateUpdated(workspaceId, workspacePath);
 				}
-				if (
-					previousSummary &&
-					previousSummary.state !== "awaiting_review" &&
-					summary.state === "awaiting_review" &&
-					shouldNotifyTaskReadyForReview(summary.reviewReason)
-				) {
-					// Two destinations, deliberately side by side: the runtime stream reaches
-					// browser tabs, and the Cline hub reaches whoever subscribes to it (the
-					// menubar app today, CLI connectors once they subscribe). The hub call is
-					// NOT inside broadcastTaskReadyForReview because that function returns
-					// early when no tab is open -- which is exactly the case this is for.
-					broadcastTaskReadyForReview(workspaceId, summary.taskId);
-					void notifyHubTaskReadyForReview(workspaceId, summary.workspacePath, summary.taskId);
-				}
+				handleTaskSessionSummaryTransition(workspaceId, previousSummary, summary);
 			});
 			clineSummaryUnsubscribeByWorkspaceId.set(workspaceId, unsubscribe);
 			const unsubscribeMessage = service.onMessage((taskId, message) => {
