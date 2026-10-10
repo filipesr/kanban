@@ -347,6 +347,9 @@ export function addTaskToColumnWithResult(
 			agentId: draft.agentId,
 			clineSettings: draft.clineSettings,
 			baseRef: draft.baseRef,
+			// Newest first: someone adding one card at a time should see it without scrolling.
+			// The shared default is arrival order, which is what batch creation means.
+			position: "top",
 		},
 		createBrowserUuid,
 	);

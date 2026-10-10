@@ -272,3 +272,39 @@ describe("per-task agent/model/provider overrides", () => {
 		});
 	});
 });
+
+describe("addTaskToColumn insertion order", () => {
+	function uuid() {
+		let n = 0;
+		return () => `uuid-${++n}`;
+	}
+
+	it("keeps the order cards were created in", () => {
+		// The column used to prepend unconditionally, so creating a prioritized list through the
+		// CLI produced that list upside down -- the most important card at the bottom. Nothing
+		// pinned the order, which is why it went unnoticed.
+		const next = uuid();
+		let board = createBoard();
+		for (const prompt of ["first", "second", "third"]) {
+			board = addTaskToColumn(board, "backlog", { prompt, baseRef: "main" }, next).board;
+		}
+		expect(board.columns[0]?.cards.map((card) => card.prompt)).toEqual(["first", "second", "third"]);
+	});
+
+	it("puts the card on top when asked to", () => {
+		// The board's reading order for a human adding one card at a time; the web UI asks for it.
+		const next = uuid();
+		let board = createBoard();
+		for (const prompt of ["first", "second"]) {
+			board = addTaskToColumn(board, "backlog", { prompt, baseRef: "main", position: "top" }, next).board;
+		}
+		expect(board.columns[0]?.cards.map((card) => card.prompt)).toEqual(["second", "first"]);
+	});
+
+	it("leaves the other columns alone either way", () => {
+		const next = uuid();
+		const board = addTaskToColumn(createBoard(), "review", { prompt: "only", baseRef: "main" }, next).board;
+		expect(board.columns.find((column) => column.id === "review")?.cards).toHaveLength(1);
+		expect(board.columns.find((column) => column.id === "backlog")?.cards).toHaveLength(0);
+	});
+});

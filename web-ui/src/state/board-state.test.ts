@@ -869,3 +869,17 @@ describe("board dependency state", () => {
 		});
 	});
 });
+
+describe("new cards in the board UI", () => {
+	it("appear at the top of the column", () => {
+		// Newest first is the board's reading order for someone adding one card at a time: it is
+		// visible without scrolling. The shared helper defaults to arrival order instead, so this
+		// pins the UI's choice rather than letting a change of that default drag it along.
+		let board = createInitialBoardData();
+		for (const prompt of ["older", "newer"]) {
+			board = addTaskToColumn(board, "backlog", { prompt, baseRef: "main" });
+		}
+		const backlog = board.columns.find((column) => column.id === "backlog");
+		expect(backlog?.cards.map((card) => card.prompt)).toEqual(["newer", "older"]);
+	});
+});

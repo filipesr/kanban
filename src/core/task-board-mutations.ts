@@ -22,7 +22,19 @@ export interface RuntimeCreateTaskInput {
 	agentId?: RuntimeAgentId;
 	clineSettings?: RuntimeTaskClineSettings;
 	baseRef: string;
+	/**
+	 * Where the card lands in its column. Defaults to `"bottom"`: arrival order, which is what
+	 * someone creating several cards in sequence means by the order they typed them.
+	 *
+	 * `"top"` is the board's reading order for a human adding one card at a time -- newest first,
+	 * visible without scrolling -- and the web UI asks for it explicitly. It used to be the only
+	 * behavior, and silently: creating a prioritized list through the CLI produced that list
+	 * upside down, with the most important card at the bottom.
+	 */
+	position?: RuntimeTaskInsertPosition;
 }
+
+export type RuntimeTaskInsertPosition = "top" | "bottom";
 
 export interface RuntimeUpdateTaskInput {
 	title?: string;
@@ -325,7 +337,7 @@ export function addTaskToColumn(
 		}
 		return {
 			...column,
-			cards: [task, ...column.cards],
+			cards: input.position === "top" ? [task, ...column.cards] : [...column.cards, task],
 		};
 	});
 
