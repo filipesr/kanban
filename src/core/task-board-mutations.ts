@@ -7,7 +7,9 @@ import type {
 	RuntimeTaskAutoReviewMode,
 	RuntimeTaskClineSettings,
 	RuntimeTaskImage,
+	RuntimeTaskPriority,
 } from "./api-contract";
+import { normalizeTaskCategory, normalizeTaskPriority, normalizeTaskTags } from "./task-attributes";
 import { createUniqueTaskId } from "./task-id";
 import { resolveTaskTitle } from "./task-title";
 
@@ -22,6 +24,9 @@ export interface RuntimeCreateTaskInput {
 	agentId?: RuntimeAgentId;
 	clineSettings?: RuntimeTaskClineSettings;
 	baseRef: string;
+	tags?: string[];
+	category?: string;
+	priority?: RuntimeTaskPriority;
 	/**
 	 * Where the card lands in its column. Defaults to `"bottom"`: arrival order, which is what
 	 * someone creating several cards in sequence means by the order they typed them.
@@ -46,6 +51,10 @@ export interface RuntimeUpdateTaskInput {
 	agentId?: RuntimeAgentId | null;
 	clineSettings?: RuntimeTaskClineSettings | null;
 	baseRef: string;
+	/** Absent leaves the card's value alone; `null` clears it. */
+	tags?: string[] | null;
+	category?: string | null;
+	priority?: RuntimeTaskPriority | null;
 }
 
 function normalizeTaskAutoReviewMode(value: RuntimeTaskAutoReviewMode | null | undefined): RuntimeTaskAutoReviewMode {
@@ -291,6 +300,25 @@ export function updateTaskDependencies(board: RuntimeBoardData): RuntimeBoardDat
 	};
 }
 
+/**
+ * The attribute fields a card carries, each left out entirely when it has no value. An explicit
+ * `undefined` on disk would be noise, and `tags: []` would read as "deliberately none".
+ */
+function buildTaskAttributes(input: {
+	tags?: string[];
+	category?: string;
+	priority?: RuntimeTaskPriority;
+}): Partial<Pick<RuntimeBoardCard, "tags" | "category" | "priority">> {
+	const tags = normalizeTaskTags(input.tags);
+	const category = normalizeTaskCategory(input.category);
+	const priority = normalizeTaskPriority(input.priority);
+	return {
+		...(tags ? { tags } : {}),
+		...(category ? { category } : {}),
+		...(priority ? { priority } : {}),
+	};
+}
+
 export function addTaskToColumn(
 	board: RuntimeBoardData,
 	columnId: RuntimeBoardColumnId,
@@ -322,6 +350,9 @@ export function addTaskToColumn(
 		...(input.agentId ? { agentId: input.agentId } : {}),
 		...(input.clineSettings !== undefined ? { clineSettings: cloneTaskClineSettings(input.clineSettings) } : {}),
 		baseRef,
+		// Omitted rather than stored empty, so a card with no tags looks the same as every card
+		// written before tags existed.
+		...buildTaskAttributes(input),
 		createdAt: now,
 		updatedAt: now,
 	};
@@ -636,6 +667,15 @@ export function updateTask(
 				autoReviewMode: normalizeTaskAutoReviewMode(input.autoReviewMode),
 				images: input.images === undefined ? card.images : cloneTaskImages(input.images),
 				agentId: input.agentId === undefined ? card.agentId : (input.agentId ?? undefined),
+				tags: input.tags === undefined ? card.tags : (normalizeTaskTags(input.tags ?? undefined) ?? undefined),
+				category:
+					input.category === undefined
+						? card.category
+						: (normalizeTaskCategory(input.category ?? undefined) ?? undefined),
+				priority:
+					input.priority === undefined
+						? card.priority
+						: (normalizeTaskPriority(input.priority ?? undefined) ?? undefined),
 				clineSettings:
 					input.clineSettings === undefined
 						? cloneTaskClineSettings(card.clineSettings)

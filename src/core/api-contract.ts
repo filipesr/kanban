@@ -71,6 +71,9 @@ export const runtimeSlashCommandsResponseSchema = z.object({
 });
 export type RuntimeSlashCommandsResponse = z.infer<typeof runtimeSlashCommandsResponseSchema>;
 
+export const runtimeTaskPrioritySchema = z.enum(["high", "medium", "low"]);
+export type RuntimeTaskPriority = z.infer<typeof runtimeTaskPrioritySchema>;
+
 export const runtimeAgentIdSchema = z.enum(["claude", "codex", "gemini", "opencode", "droid", "kiro", "cline"]);
 export type RuntimeAgentId = z.infer<typeof runtimeAgentIdSchema>;
 
@@ -144,6 +147,12 @@ export const runtimeBoardCardSchema = z
 		clineModelId: z.string().optional(),
 		clineReasoningEffort: runtimeLegacyTaskClineReasoningEffortSchema.optional(),
 		baseRef: z.string(),
+		// Data only: nothing on the board behaves differently because of these. They exist so a
+		// board with many cards can be searched, which is why they are optional -- every card
+		// written before they existed still loads.
+		tags: z.array(z.string()).optional(),
+		category: z.string().optional(),
+		priority: runtimeTaskPrioritySchema.optional(),
 		createdAt: z.number(),
 		updatedAt: z.number(),
 	})

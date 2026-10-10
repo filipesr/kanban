@@ -8,10 +8,12 @@ import type {
 	RuntimeBoardDependency,
 	RuntimeClineReasoningEffort,
 	RuntimeTaskClineSettings,
+	RuntimeTaskPriority,
 	RuntimeWorkspaceStateResponse,
 } from "../core/api-contract";
 import { runtimeAgentIdSchema, runtimeClineReasoningEffortSchema } from "../core/api-contract";
 import { buildKanbanRuntimeUrl, getKanbanRuntimeOrigin, getRuntimeFetch } from "../core/runtime-endpoint";
+import { normalizeTaskCategory, parseTaskPriorityOption, parseTaskTagList } from "../core/task-attributes";
 import {
 	addTaskDependency,
 	addTaskToColumn,
@@ -483,6 +485,9 @@ async function createTask(input: {
 	autoReviewMode?: "commit" | "pr";
 	agentId?: RuntimeAgentId;
 	clineSettings?: RuntimeTaskClineSettings;
+	tags?: string[];
+	category?: string;
+	priority?: RuntimeTaskPriority;
 }): Promise<JsonRecord> {
 	const workspaceRepoPath = await resolveWorkspaceRepoPath(input.projectPath, input.cwd);
 	const workspaceId = await ensureRuntimeWorkspace(workspaceRepoPath);
@@ -504,6 +509,9 @@ async function createTask(input: {
 				agentId: input.agentId,
 				clineSettings: input.clineSettings,
 				baseRef: resolvedBaseRef,
+				tags: input.tags,
+				category: input.category,
+				priority: input.priority,
 			},
 			() => globalThis.crypto.randomUUID(),
 		);
@@ -545,6 +553,10 @@ async function updateTaskCommand(input: {
 	clineProviderId?: string | null;
 	clineModelId?: string | null;
 	clineReasoningEffort?: ParsedTaskClineReasoningEffort;
+	/** Absent leaves the card's value alone; `null` clears it. */
+	tags?: string[] | null;
+	category?: string | null;
+	priority?: RuntimeTaskPriority | null;
 }): Promise<JsonRecord> {
 	if (
 		input.title === undefined &&
@@ -556,7 +568,10 @@ async function updateTaskCommand(input: {
 		input.agentId === undefined &&
 		input.clineProviderId === undefined &&
 		input.clineModelId === undefined &&
-		input.clineReasoningEffort === undefined
+		input.clineReasoningEffort === undefined &&
+		input.tags === undefined &&
+		input.category === undefined &&
+		input.priority === undefined
 	) {
 		throw new Error("task update requires at least one field to change.");
 	}
@@ -584,6 +599,9 @@ async function updateTaskCommand(input: {
 			autoReviewMode: input.autoReviewMode ?? taskRecord.task.autoReviewMode ?? "commit",
 			agentId: input.agentId,
 			clineSettings: nextTaskClineSettings,
+			tags: input.tags,
+			category: input.category,
+			priority: input.priority,
 		});
 		if (!updatedTask.updated || !updatedTask.task) {
 			throw new Error(`Task "${input.taskId}" could not be updated.`);
@@ -1125,6 +1143,9 @@ export function registerTaskCommand(program: Command): void {
 		.option("--start-in-plan-mode [value]", "Set plan mode (true|false). Flag-only implies true.")
 		.option("--auto-review-enabled [value]", "Enable auto-review behavior (true|false). Flag-only implies true.")
 		.option("--auto-review-mode <mode>", "Auto-review mode: commit | pr.", parseAutoReviewMode)
+		.option("--tags <list>", "Comma-separated tags, e.g. infra,docs.")
+		.option("--category <text>", "Single category, e.g. bug | feature | infra.")
+		.option("--priority <level>", "Priority: high | medium | low.")
 		.option("--agent-id <id>", "Agent override: cline | claude | codex | droid | gemini | opencode | default.")
 		.option(
 			"--cline-provider <id>",
@@ -1151,6 +1172,9 @@ export function registerTaskCommand(program: Command): void {
 				clineProvider?: string;
 				clineModel?: string;
 				clineReasoningEffort?: string;
+				tags?: string;
+				category?: string;
+				priority?: string;
 			}) => {
 				await runTaskCommand(
 					async () =>
@@ -1164,6 +1188,9 @@ export function registerTaskCommand(program: Command): void {
 							autoReviewEnabled: parseOptionalBooleanOption(options.autoReviewEnabled, "--auto-review-enabled"),
 							autoReviewMode: options.autoReviewMode,
 							agentId: parseAgentId(options.agentId) ?? undefined,
+							tags: parseTaskTagList(options.tags),
+							category: normalizeTaskCategory(options.category),
+							priority: parseTaskPriorityOption(options.priority) ?? undefined,
 							clineSettings: buildTaskClineSettingsForCreate({
 								providerId: parseOptionalStringOrDefault(options.clineProvider) ?? undefined,
 								modelId: parseOptionalStringOrDefault(options.clineModel) ?? undefined,
@@ -1185,6 +1212,9 @@ export function registerTaskCommand(program: Command): void {
 		.option("--start-in-plan-mode [value]", "Set plan mode (true|false). Flag-only implies true.")
 		.option("--auto-review-enabled [value]", "Enable auto-review behavior (true|false). Flag-only implies true.")
 		.option("--auto-review-mode <mode>", "Auto-review mode: commit | pr.", parseAutoReviewMode)
+		.option("--tags <list>", 'Comma-separated tags. Use "" to clear.')
+		.option("--category <text>", 'Single category. Use "" to clear.')
+		.option("--priority <level>", 'Priority: high | medium | low. Use "" to clear.')
 		.option(
 			"--agent-id <id>",
 			'Agent override: cline | claude | codex | droid | gemini | opencode. Use "default" to clear.',
@@ -1212,6 +1242,9 @@ export function registerTaskCommand(program: Command): void {
 				clineProvider?: string;
 				clineModel?: string;
 				clineReasoningEffort?: string;
+				tags?: string;
+				category?: string;
+				priority?: string;
 			}) => {
 				await runTaskCommand(
 					async () =>
@@ -1226,6 +1259,11 @@ export function registerTaskCommand(program: Command): void {
 							autoReviewEnabled: parseOptionalBooleanOption(options.autoReviewEnabled, "--auto-review-enabled"),
 							autoReviewMode: options.autoReviewMode,
 							agentId: parseAgentId(options.agentId),
+							// An absent flag leaves the card alone; an empty one clears the field.
+							tags: options.tags === undefined ? undefined : (parseTaskTagList(options.tags) ?? null),
+							category:
+								options.category === undefined ? undefined : (normalizeTaskCategory(options.category) ?? null),
+							priority: parseTaskPriorityOption(options.priority),
 							clineProviderId: parseOptionalStringOrDefault(options.clineProvider),
 							clineModelId: parseOptionalStringOrDefault(options.clineModel),
 							clineReasoningEffort: parseTaskClineReasoningEffort(options.clineReasoningEffort),

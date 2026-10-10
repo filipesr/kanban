@@ -308,3 +308,79 @@ describe("addTaskToColumn insertion order", () => {
 		expect(board.columns.find((column) => column.id === "backlog")?.cards).toHaveLength(0);
 	});
 });
+
+describe("card attributes", () => {
+	function uuid() {
+		let n = 0;
+		return () => `uuid-${++n}`;
+	}
+
+	it("stores tags, category and priority normalized", () => {
+		const result = addTaskToColumn(
+			createBoard(),
+			"backlog",
+			{
+				prompt: "work",
+				baseRef: "main",
+				tags: [" Infra ", "infra", "docs"],
+				category: "  bug ",
+				priority: "HIGH" as never,
+			},
+			uuid(),
+		);
+		expect(result.task.tags).toEqual(["Infra", "docs"]);
+		expect(result.task.category).toBe("bug");
+		expect(result.task.priority).toBe("high");
+	});
+
+	it("leaves the fields off a card that has none", () => {
+		// A card with no tags must look exactly like every card written before tags existed:
+		// `tags: []` would read as "deliberately none" and an explicit undefined is noise.
+		const result = addTaskToColumn(createBoard(), "backlog", { prompt: "work", baseRef: "main" }, uuid());
+		expect("tags" in result.task).toBe(false);
+		expect("category" in result.task).toBe(false);
+		expect("priority" in result.task).toBe(false);
+	});
+
+	it("drops a priority outside the three levels instead of guessing", () => {
+		const result = addTaskToColumn(
+			createBoard(),
+			"backlog",
+			{ prompt: "work", baseRef: "main", priority: "urgent" as never },
+			uuid(),
+		);
+		expect(result.task.priority).toBeUndefined();
+	});
+
+	it("keeps the card's attributes when an update does not mention them", () => {
+		const created = addTaskToColumn(
+			createBoard(),
+			"backlog",
+			{ prompt: "work", baseRef: "main", tags: ["infra"], priority: "low" },
+			uuid(),
+		);
+		const updated = updateTask(created.board, created.task.id, {
+			prompt: "work again",
+			baseRef: "main",
+		});
+		expect(updated.task?.tags).toEqual(["infra"]);
+		expect(updated.task?.priority).toBe("low");
+	});
+
+	it("clears an attribute when the update says null", () => {
+		const created = addTaskToColumn(
+			createBoard(),
+			"backlog",
+			{ prompt: "work", baseRef: "main", tags: ["infra"], category: "bug" },
+			uuid(),
+		);
+		const updated = updateTask(created.board, created.task.id, {
+			prompt: "work",
+			baseRef: "main",
+			tags: null,
+			category: null,
+		});
+		expect(updated.task?.tags).toBeUndefined();
+		expect(updated.task?.category).toBeUndefined();
+	});
+});
