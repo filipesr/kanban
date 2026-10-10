@@ -134,3 +134,37 @@ Depende do resultado da Tarefa 1.
   existe, falta correlacionar a resposta ao id do cartão.
 - **Tags, categorias e prioridade nos cartões** (item 3): independente, só modelo e interface;
   mas é **feature**, então nasce no fork e vai para discussão, não para PR.
+
+---
+
+# Resultado da Tarefa 1 — medido em 2026-10-10
+
+**O conector de Telegram NÃO encaminha `ui.notify`.** Logo, a entrega são **dois PRs**.
+
+Como se provou, por três caminhos independentes:
+
+1. **Empírico.** Dois `ui.notify` publicados no hub, autenticados (17:19 e 17:31 UTC), ambos
+   confirmados em `hub_events`. Nada chegou ao Telegram. O conector estava no ar e **registrado
+   como cliente do hub** (`type=cli name=telegram connector`), então o problema não é conexão.
+2. **Busca no fonte.** Dos 10 arquivos de `cline/cline` que mencionam `ui.notify`, **nenhum** é
+   de conector. Os conectores vivem em `apps/cli/src/connectors/` e não o referenciam.
+3. **Declarado em comentário.** `apps/cli/src/main.ts:1227-1229`, sobre o modo `--zen`:
+   *"completion is delivered via the hub's existing ui.notify broadcast (picked up by the
+   menubar app when installed)"*.
+
+## O que isso muda, e melhora, no argumento upstream
+
+O `--zen` já é "dispara no hub e me avise quando terminar". Hoje esse aviso só existe para quem
+instalou o app de barra de menu — macOS, e opcional. **Um conector assinando `ui.notify` não é
+feature nova: é a entrega que falta a um recurso que já existe**, e passa a servir qualquer
+pessoa com Telegram, Slack ou Discord.
+
+Isso vale para a discussão upstream mais que o caso do Kanban: o Kanban é um consumidor novo do
+mesmo barramento; o `--zen` é um consumidor que já está lá, mudo.
+
+## Consequência para o plano
+
+- **Tarefa 6 deixa de ser "teste de ponta a ponta"** e passa a ser uma mudança no fork
+  `filipesr/cline`: o conector assina `ui.notify` e encaminha para a conversa.
+- O SDK **é** público, dentro do monorepo `cline/cline` (`sdk/packages/core/src/hub/...`) — a
+  busca inicial por `cline/sdk-wip` falhou porque é só o `repository.url` do pacote npm.
