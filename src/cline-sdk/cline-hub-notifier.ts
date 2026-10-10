@@ -29,6 +29,7 @@ export interface ClineHubNotifyClient {
 		body: string;
 		severity?: "info" | "warning" | "error";
 		source?: { workspacePath?: string; itemId?: string };
+		supersedesPrevious?: boolean;
 	}): Promise<void>;
 	dispose(): Promise<void>;
 }
@@ -55,6 +56,11 @@ export interface ReadyForReviewNotification {
 	 * where, and can only broadcast or guess.
 	 */
 	workspacePath?: string;
+}
+
+export interface CardProgressNotification extends ReadyForReviewNotification {
+	/** What the card is doing right now, as a person would read it on a phone. */
+	activity: string;
 }
 
 async function defaultIsEnabled(): Promise<boolean> {
@@ -94,6 +100,7 @@ function defaultCreateClient(record: Required<ClineHubDiscoveryRecord>): ClineHu
 
 export interface ClineHubNotifier {
 	notifyReadyForReview(notification: ReadyForReviewNotification): Promise<void>;
+	notifyCardProgress(notification: CardProgressNotification): Promise<void>;
 }
 
 export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): ClineHubNotifier {
@@ -101,42 +108,73 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): C
 	const readDiscovery = options.readDiscovery ?? defaultReadDiscovery;
 	const createClient = options.createClient ?? defaultCreateClient;
 
-	return {
-		async notifyReadyForReview(notification: ReadyForReviewNotification): Promise<void> {
-			let client: ClineHubNotifyClient | undefined;
-			try {
-				if (!(await isEnabled())) {
-					return;
-				}
-				const record = await readDiscovery();
-				if (!record?.url || !record.authToken) {
-					// No hub running, or a hub we cannot authenticate against. Both are normal.
-					return;
-				}
-				client = createClient({ url: record.url, authToken: record.authToken });
-				await client.connect();
-				await client.sendNotify({
-					title: "Ready for review",
-					// The body is what a person reads on a phone, so it leads with what and where.
-					body: `${notification.taskTitle} — ${notification.workspaceName}`,
-					severity: "info",
-					// The machine-readable half: a subscriber matches this against the workspace
-					// it is bound to, instead of broadcasting or picking the last active one.
-					source: {
-						workspacePath: notification.workspacePath,
-						itemId: notification.taskId,
-					},
-				});
-			} catch {
-				// Deliberately silent: a notification that fails must never surface as a board
-				// error, and must never be retried in a way that delays the card.
-			} finally {
-				try {
-					await client?.dispose();
-				} catch {
-					// Disposing a client that never connected is not a problem worth reporting.
-				}
+	/**
+	 * One place for the whole ritual -- opt-in check, discovery, connect, dispose -- so each
+	 * kind of notification only has to say what it is.
+	 */
+	const publish = async (payload: {
+		title: string;
+		body: string;
+		taskId: string;
+		workspacePath?: string;
+		supersedesPrevious?: boolean;
+	}): Promise<void> => {
+		let client: ClineHubNotifyClient | undefined;
+		try {
+			if (!(await isEnabled())) {
+				return;
 			}
+			const record = await readDiscovery();
+			if (!record?.url || !record.authToken) {
+				// No hub running, or a hub we cannot authenticate against. Both are normal.
+				return;
+			}
+			client = createClient({ url: record.url, authToken: record.authToken });
+			await client.connect();
+			await client.sendNotify({
+				title: payload.title,
+				body: payload.body,
+				severity: "info",
+				// The machine-readable half: a subscriber matches this against the workspace it
+				// is bound to, instead of broadcasting or picking the last active one.
+				source: {
+					workspacePath: payload.workspacePath,
+					itemId: payload.taskId,
+				},
+				...(payload.supersedesPrevious ? { supersedesPrevious: true } : {}),
+			});
+		} catch {
+			// Deliberately silent: a notification that fails must never surface as a board
+			// error, and must never be retried in a way that delays the card.
+		} finally {
+			try {
+				await client?.dispose();
+			} catch {
+				// Disposing a client that never connected is not a problem worth reporting.
+			}
+		}
+	};
+
+	return {
+		notifyReadyForReview(notification: ReadyForReviewNotification): Promise<void> {
+			return publish({
+				title: "Ready for review",
+				// The body is what a person reads on a phone, so it leads with what and where.
+				body: `${notification.taskTitle} — ${notification.workspaceName}`,
+				taskId: notification.taskId,
+				workspacePath: notification.workspacePath,
+				// Never: this one asks the person for something, so it has to arrive on its own
+				// instead of quietly replacing a status line.
+			});
+		},
+		notifyCardProgress(notification: CardProgressNotification): Promise<void> {
+			return publish({
+				title: notification.taskTitle,
+				body: `${notification.workspaceName} · ${notification.activity}`,
+				taskId: notification.taskId,
+				workspacePath: notification.workspacePath,
+				supersedesPrevious: true,
+			});
 		},
 	};
 }

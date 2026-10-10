@@ -24,6 +24,7 @@ import type {
 } from "../core/api-contract";
 import { resolveTaskTitle } from "../core/task-title";
 import type { TerminalSessionManager } from "../terminal/session-manager";
+import { type CardProgressState, resolveCardProgress } from "./card-progress-notification";
 import { shouldNotifyTaskReadyForReview } from "./ready-for-review-notification";
 import { createWorkspaceMetadataMonitor } from "./workspace-metadata-monitor";
 import type { ResolvedWorkspaceStreamTarget, WorkspaceRegistry } from "./workspace-registry";
@@ -72,6 +73,9 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 	const clineMessageUnsubscribeByWorkspaceId = new Map<string, () => void>();
 	const clinePreviousSummaryByWorkspaceId = new Map<string, Map<string, RuntimeTaskSessionSummary>>();
 	const terminalPreviousSummaryByWorkspaceId = new Map<string, Map<string, RuntimeTaskSessionSummary>>();
+	// What each card last said it was doing, so the same line is not repeated and updates stay
+	// spaced out. Keyed by workspace and task; dropped with the workspace.
+	const cardProgressByWorkspaceId = new Map<string, Map<string, CardProgressState>>();
 	const pendingTaskSessionSummariesByWorkspaceId = new Map<string, Map<string, RuntimeTaskSessionSummary>>();
 	const taskSessionBroadcastTimersByWorkspaceId = new Map<string, NodeJS.Timeout>();
 	const runtimeStateClientsByWorkspaceId = new Map<string, Set<WebSocket>>();
@@ -256,6 +260,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 		}
 		terminalSummaryUnsubscribeByWorkspaceId.delete(workspaceId);
 		terminalPreviousSummaryByWorkspaceId.delete(workspaceId);
+		cardProgressByWorkspaceId.delete(workspaceId);
 		const unsubscribeClineSummary = clineSummaryUnsubscribeByWorkspaceId.get(workspaceId);
 		if (unsubscribeClineSummary) {
 			try {
@@ -338,28 +343,40 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 	 * Resolving the card title is best-effort -- a notification with the task id is still far
 	 * better than no notification, which is what exists today when no tab is open.
 	 */
+	/**
+	 * The card's title and its workspace's name, for a notification someone will read without
+	 * the board in front of them. Falls back to the ids, which are useless to a human but
+	 * better than no notification: the lookup is a nicety, not a precondition.
+	 */
+	const resolveCardIdentity = async (
+		workspaceId: string,
+		workspacePath: string | null,
+		taskId: string,
+	): Promise<{ taskTitle: string; workspaceName: string }> => {
+		let taskTitle = taskId;
+		let workspaceName = workspaceId;
+		if (workspacePath) {
+			try {
+				const snapshot = await deps.workspaceRegistry.buildWorkspaceStateSnapshot(workspaceId, workspacePath);
+				const card = snapshot.board.columns.flatMap((column) => column.cards).find((entry) => entry.id === taskId);
+				if (card) {
+					taskTitle = resolveTaskTitle(card.title, card.prompt);
+				}
+				workspaceName = basename(workspacePath) || workspaceId;
+			} catch {
+				// Keep the fallbacks.
+			}
+		}
+		return { taskTitle, workspaceName };
+	};
+
 	const notifyHubTaskReadyForReview = async (
 		workspaceId: string,
 		workspacePath: string | null,
 		taskId: string,
 	): Promise<void> => {
 		try {
-			let taskTitle = taskId;
-			let workspaceName = workspaceId;
-			if (workspacePath) {
-				try {
-					const snapshot = await deps.workspaceRegistry.buildWorkspaceStateSnapshot(workspaceId, workspacePath);
-					const card = snapshot.board.columns
-						.flatMap((column) => column.cards)
-						.find((entry) => entry.id === taskId);
-					if (card) {
-						taskTitle = resolveTaskTitle(card.title, card.prompt);
-					}
-					workspaceName = basename(workspacePath) || workspaceId;
-				} catch {
-					// Title lookup is a nicety; the notification goes out regardless.
-				}
-			}
+			const { taskTitle, workspaceName } = await resolveCardIdentity(workspaceId, workspacePath, taskId);
 			await hubNotifier.notifyReadyForReview({
 				taskId,
 				taskTitle,
@@ -368,6 +385,26 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 			});
 		} catch {
 			// Notification is an accessory and must never surface as a board error.
+		}
+	};
+
+	const notifyHubCardProgress = async (
+		workspaceId: string,
+		workspacePath: string | null,
+		taskId: string,
+		activity: string,
+	): Promise<void> => {
+		try {
+			const { taskTitle, workspaceName } = await resolveCardIdentity(workspaceId, workspacePath, taskId);
+			await hubNotifier.notifyCardProgress({
+				taskId,
+				taskTitle,
+				workspaceName,
+				workspacePath: workspacePath ?? undefined,
+				activity,
+			});
+		} catch {
+			// Progress is the most expendable thing on the board.
 		}
 	};
 
@@ -403,6 +440,33 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 			workspaceId,
 			deps.workspaceRegistry.getWorkspacePathById(workspaceId),
 			summary.taskId,
+		);
+	};
+
+	/**
+	 * A running card saying what it is doing. Separate from the transition above because this
+	 * one supersedes itself: it is a status line, not an interruption.
+	 */
+	const handleCardProgress = (workspaceId: string, summary: RuntimeTaskSessionSummary): void => {
+		let byTaskId = cardProgressByWorkspaceId.get(workspaceId);
+		if (!byTaskId) {
+			byTaskId = new Map<string, CardProgressState>();
+			cardProgressByWorkspaceId.set(workspaceId, byTaskId);
+		}
+		const decision = resolveCardProgress({
+			summary,
+			previous: byTaskId.get(summary.taskId) ?? {},
+			now: Date.now(),
+		});
+		if (!decision) {
+			return;
+		}
+		byTaskId.set(summary.taskId, decision.next);
+		void notifyHubCardProgress(
+			workspaceId,
+			deps.workspaceRegistry.getWorkspacePathById(workspaceId),
+			summary.taskId,
+			decision.text,
 		);
 	};
 
@@ -591,6 +655,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 				previousSummariesByTaskId.set(summary.taskId, summary);
 				queueTaskSessionSummaryBroadcast(workspaceId, summary);
 				handleTaskSessionSummaryTransition(workspaceId, previousSummary, summary);
+				handleCardProgress(workspaceId, summary);
 			});
 			terminalSummaryUnsubscribeByWorkspaceId.set(workspaceId, unsubscribe);
 		},
@@ -615,6 +680,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 					void broadcastRuntimeWorkspaceStateUpdated(workspaceId, workspacePath);
 				}
 				handleTaskSessionSummaryTransition(workspaceId, previousSummary, summary);
+				handleCardProgress(workspaceId, summary);
 			});
 			clineSummaryUnsubscribeByWorkspaceId.set(workspaceId, unsubscribe);
 			const unsubscribeMessage = service.onMessage((taskId, message) => {

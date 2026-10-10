@@ -42,9 +42,18 @@ function harness() {
 			workspacePath?: string;
 		}) => Promise<void>
 	>(async () => undefined);
+	const notifyCardProgress = vi.fn<
+		(notification: {
+			taskId: string;
+			taskTitle: string;
+			workspaceName: string;
+			workspacePath?: string;
+			activity: string;
+		}) => Promise<void>
+	>(async () => undefined);
 	let emit: (summary: RuntimeTaskSessionSummary) => void = () => undefined;
 	const hub = createRuntimeStateHub({
-		hubNotifier: { notifyReadyForReview },
+		hubNotifier: { notifyReadyForReview, notifyCardProgress },
 		workspaceRegistry: {
 			getWorkspacePathById: () => REPO,
 			buildWorkspaceStateSnapshot: async () => ({
@@ -62,7 +71,11 @@ function harness() {
 		},
 	} as never;
 	hub.trackTerminalManager("partyshare", manager);
-	return { notifyReadyForReview, emit: (s: RuntimeTaskSessionSummary) => emit(s) };
+	return {
+		notifyReadyForReview,
+		notifyCardProgress,
+		emit: (s: RuntimeTaskSessionSummary) => emit(s),
+	};
 }
 
 describe("ready-for-review notification from a terminal agent", () => {
@@ -105,5 +118,45 @@ describe("ready-for-review notification from a terminal agent", () => {
 		h.emit(summary({ state: "awaiting_review", reviewReason: "exit", exitCode: 0 }));
 		await new Promise((resolve) => setTimeout(resolve, 20));
 		expect(h.notifyReadyForReview).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe("a running card saying what it is doing", () => {
+	it("reports the tool, carrying the repository path like the review notice does", async () => {
+		const h = harness();
+		h.emit(summary({ state: "idle" }));
+		h.emit(
+			summary({
+				state: "running",
+				latestHookActivity: {
+					activityText: null,
+					toolName: "Bash",
+					toolInputSummary: null,
+					finalMessage: null,
+					hookEventName: null,
+					notificationType: null,
+					source: null,
+				},
+			}),
+		);
+		await vi.waitFor(() => expect(h.notifyCardProgress).toHaveBeenCalledTimes(1));
+		const sent = h.notifyCardProgress.mock.calls[0]?.[0];
+		expect(sent?.activity).toBe("Running · Bash");
+		expect(sent?.workspacePath).toBe(REPO);
+	});
+
+	it("does not report progress for a card entering review", async () => {
+		// That notification asks the person for something, so it must not be folded into a
+		// status line that quietly replaces itself.
+		const h = harness();
+		h.emit(summary({ state: "running" }));
+		// Wait for the running line to land before clearing: the publish is fired and not
+		// awaited, so clearing too early would count it against the next emit.
+		await vi.waitFor(() => expect(h.notifyCardProgress).toHaveBeenCalledTimes(1));
+		h.notifyCardProgress.mockClear();
+
+		h.emit(summary({ state: "awaiting_review", reviewReason: "exit", exitCode: 0 }));
+		await vi.waitFor(() => expect(h.notifyReadyForReview).toHaveBeenCalled());
+		expect(h.notifyCardProgress).not.toHaveBeenCalled();
 	});
 });
