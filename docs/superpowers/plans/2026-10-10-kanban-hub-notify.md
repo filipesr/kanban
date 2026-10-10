@@ -168,3 +168,63 @@ mesmo barramento; o `--zen` é um consumidor que já está lá, mudo.
   `filipesr/cline`: o conector assina `ui.notify` e encaminha para a conversa.
 - O SDK **é** público, dentro do monorepo `cline/cline` (`sdk/packages/core/src/hub/...`) — a
   busca inicial por `cline/sdk-wip` falhou porque é só o `repository.url` do pacote npm.
+
+---
+
+# Resultado do teste de ponta a ponta (10/10/2026, 16h)
+
+Ciclo fechado e provado com disparo real: cartão → review → hub → conector → tópico do Telegram.
+A evidência é o par de registros a um segundo de distância:
+
+```
+hub_events  16:47:55  ui.notify  {"title":"Ready for review",
+                                  "body":"Teste de carão/tarefa — partyshare",
+                                  "source":{"workspacePath":"/Users/fsrezende/Documents/algorithm/partyshare",
+                                            "itemId":"461e5"}}
+cline.log   16:47:56  Telegram notification delivered  telegram:-1004378402573:49
+```
+
+## Três defeitos que 209 + 598 testes verdes não pegavam
+
+Nenhum é erro de lógica. Todos são da classe "o programa encontra o mundo", e todos estavam na
+costura entre peças que, isoladas, estavam certas.
+
+**1. Método inventado, escondido por um molde** (`cline`, conector).
+A interface declarava `subscribe`; `HubUIClient` tem `subscribeUI`. Um `as unknown as`
+silenciou a divergência, e todos os testes passavam contra um dublê com a forma errada. O
+conector em execução morria com `client.subscribe is not a function` e a inscrição nunca
+existia. Corrigido sem molde; o teste agora atribui a classe real à interface, e o `tsc`
+reclama se voltarem a divergir.
+
+**2. A notificação existia só num dos dois runtimes** (`kanban`).
+O bloco vivia em `trackClineTaskSessionService`. Cartão com agente de terminal — o padrão de
+`agentId: "claude"`, que é o que se usa aqui — ia para review em silêncio. A funcionalidade
+não podia disparar para esse público. A decisão passou a viver num ponto só.
+
+**3. A notificação anunciava a worktree, não o repositório** (`kanban`).
+Cartão roda em worktree descartável sob `~/.cline/worktrees/<id>/<repo>`. Nada se liga a uma
+worktree: nem aba de navegador, nem conversa de chat. O aviso ia para um endereço inexistente
+e o roteamento, que entrega em nenhum lugar quando nada casa, ficava mudo. Passa a anunciar o
+repositório do workspace.
+
+## Uma armadilha de diagnóstico, não de funcionalidade
+
+`resolveClineBuildEnv()` devolve `development` quando `NODE_ENV=development`, e o `dev:full` do
+Kanban força isso. O notificador então procura `locks/hub/development.json`, que não existe, e
+retorna calado — por contrato, ele nunca lança e nunca registra. Em instalação real os
+ambientes coincidem e não há problema; em desenvolvimento, rodar com `CLINE_BUILD_ENV=production`
+resolve.
+
+O custo disso foi real: duas rodadas inteiras de diagnóstico. O silêncio total do notificador
+protege o board de ruído, mas torna "desligado", "hub ausente" e "falhou ao conectar"
+indistinguíveis. Se isso for para upstream, vale propor uma costura de diagnóstico opcional.
+
+## Ligação local usada no teste
+
+- **O Kanban não precisou do SDK recompilado.** Tipos são de compilação; `sendNotify` repassa o
+  payload inteiro e o servidor do hub também (`envelope.payload ?? {}`), então o campo `source`
+  atravessa intacto contra o `@clinebot/core` publicado.
+- **O conector precisou.** Rodando do fonte do fork, o `bun` resolve os workspaces mas os
+  pacotes apontam para `dist/`: `bun run build:sdk` no monorepo, uma vez.
+- Conector do fork subido com os argumentos que o CLI instalado já havia persistido em
+  `~/.cline/data/db/connectors.db`, para não passar o token em linha de comando.
