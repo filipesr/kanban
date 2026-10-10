@@ -24,7 +24,12 @@ export interface ClineHubDiscoveryRecord {
 
 export interface ClineHubNotifyClient {
 	connect(): Promise<void>;
-	sendNotify(payload: { title: string; body: string; severity?: "info" | "warning" | "error" }): Promise<void>;
+	sendNotify(payload: {
+		title: string;
+		body: string;
+		severity?: "info" | "warning" | "error";
+		source?: { workspacePath?: string; itemId?: string };
+	}): Promise<void>;
 	dispose(): Promise<void>;
 }
 
@@ -44,6 +49,12 @@ export interface ReadyForReviewNotification {
 	taskId: string;
 	taskTitle: string;
 	workspaceName: string;
+	/**
+	 * Absolute path of the workspace, travelling with the notification so a subscriber can
+	 * route it. Without it, whoever receives the event knows that something is ready but not
+	 * where, and can only broadcast or guess.
+	 */
+	workspacePath?: string;
 }
 
 async function defaultIsEnabled(): Promise<boolean> {
@@ -105,6 +116,12 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}) {
 					// The body is what a person reads on a phone, so it leads with what and where.
 					body: `${notification.taskTitle} — ${notification.workspaceName}`,
 					severity: "info",
+					// The machine-readable half: a subscriber matches this against the workspace
+					// it is bound to, instead of broadcasting or picking the last active one.
+					source: {
+						workspacePath: notification.workspacePath,
+						itemId: notification.taskId,
+					},
 				});
 			} catch {
 				// Deliberately silent: a notification that fails must never surface as a board

@@ -102,6 +102,39 @@ describe("createClineHubNotifier", () => {
 		).resolves.toBeUndefined();
 	});
 
+	// Routing is the whole point: a subscriber that knows only "something is ready" can do
+	// nothing better than guess which conversation to deliver to. The workspace path is what
+	// lets it match, so it travels with the notification.
+	it("carries the workspace path so a subscriber can route instead of guessing", async () => {
+		const sendNotify = vi.fn<
+			(payload: {
+				title: string;
+				body: string;
+				source?: { workspacePath?: string; itemId?: string };
+			}) => Promise<void>
+		>(async () => undefined);
+		const notifier = createClineHubNotifier({
+			isEnabled: async () => true,
+			readDiscovery: async () => ({ url: "ws://127.0.0.1:1/hub", authToken: "tok" }),
+			createClient: () => ({
+				connect: async () => undefined,
+				sendNotify,
+				dispose: async () => undefined,
+			}),
+		});
+
+		await notifier.notifyReadyForReview({
+			taskId: "461e5",
+			taskTitle: "Fix the console redirect",
+			workspaceName: "partyshare",
+			workspacePath: "/Users/someone/code/partyshare",
+		});
+
+		const payload = sendNotify.mock.calls[0][0];
+		expect(payload.source?.workspacePath).toBe("/Users/someone/code/partyshare");
+		expect(payload.source?.itemId).toBe("461e5");
+	});
+
 	it("always disposes the client, including when sending throws", async () => {
 		const dispose = vi.fn<() => Promise<void>>(async () => undefined);
 		const notifier = createClineHubNotifier({

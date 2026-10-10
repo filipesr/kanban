@@ -356,7 +356,12 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 					// Title lookup is a nicety; the notification goes out regardless.
 				}
 			}
-			await hubNotifier.notifyReadyForReview({ taskId, taskTitle, workspaceName });
+			await hubNotifier.notifyReadyForReview({
+				taskId,
+				taskTitle,
+				workspaceName,
+				workspacePath: workspacePath ?? undefined,
+			});
 		} catch {
 			// Notification is an accessory and must never surface as a board error.
 		}
