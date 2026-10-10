@@ -25,6 +25,7 @@ import { hasCodexWorkspaceTrustPrompt, shouldAutoConfirmCodexWorkspaceTrust } fr
 import { stripAnsi } from "./output-utils";
 import { PtySession } from "./pty-session";
 import { reduceSessionTransition, type SessionTransitionEvent } from "./session-state-machine";
+import { describeSilentAgentDeath } from "./silent-agent-death";
 import {
 	createTerminalProtocolFilterState,
 	disableOscColorQueryIntercept,
@@ -346,6 +347,9 @@ export class TerminalSessionManager implements TerminalSessionService {
 			part.toLowerCase().includes("codex"),
 		);
 		let session: PtySession;
+		// A startup failure leaves no trace anywhere else: the pty buffer is the only record and
+		// it dies with the session. See describeSilentAgentDeath.
+		let sawOutput = false;
 		try {
 			session = PtySession.spawn({
 				binary: commandBinary,
@@ -355,6 +359,7 @@ export class TerminalSessionManager implements TerminalSessionService {
 				cols,
 				rows,
 				onData: (chunk) => {
+					sawOutput = sawOutput || chunk.length > 0;
 					if (!entry.active) {
 						return;
 					}
@@ -443,6 +448,17 @@ export class TerminalSessionManager implements TerminalSessionService {
 					}
 				},
 				onExit: (event) => {
+					// Deep modules here do not print -- src/cli.ts owns the console -- so the
+					// diagnostic goes where someone debugging this already looks: the session
+					// record on disk, which until now said only "exitCode: 1".
+					const silentDeath = describeSilentAgentDeath({
+						taskId: request.taskId,
+						binary: commandBinary,
+						args: commandArgs,
+						cwd: request.cwd,
+						exitCode: event.exitCode,
+						sawOutput,
+					});
 					const currentEntry = this.entries.get(request.taskId);
 					if (!currentEntry) {
 						return;
@@ -453,11 +469,12 @@ export class TerminalSessionManager implements TerminalSessionService {
 					}
 					stopWorkspaceTrustTimers(currentActive);
 
-					const summary = this.applySessionEvent(currentEntry, {
+					const exitSummary = this.applySessionEvent(currentEntry, {
 						type: "process.exit",
 						exitCode: event.exitCode,
 						interrupted: currentActive.session.wasInterrupted(),
 					});
+					const summary = silentDeath ? updateSummary(currentEntry, { warningMessage: silentDeath }) : exitSummary;
 					const shouldAutoRestart = this.shouldAutoRestart(currentEntry);
 
 					for (const taskListener of currentEntry.listeners.values()) {
