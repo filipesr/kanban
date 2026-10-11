@@ -40,6 +40,7 @@ function harness() {
 			taskTitle: string;
 			workspaceName: string;
 			workspacePath?: string;
+			detail?: string;
 		}) => Promise<void>
 	>(async () => undefined);
 	const notifyCardProgress = vi.fn<
@@ -158,5 +159,38 @@ describe("a running card saying what it is doing", () => {
 		h.emit(summary({ state: "awaiting_review", reviewReason: "exit", exitCode: 0 }));
 		await vi.waitFor(() => expect(h.notifyReadyForReview).toHaveBeenCalled());
 		expect(h.notifyCardProgress).not.toHaveBeenCalled();
+	});
+});
+
+describe("what the review notice tells someone away from the board", () => {
+	it("carries the question the card is asking", async () => {
+		// Without it the notice can only send them to the board, which is where they were not.
+		const h = harness();
+		h.emit(summary({ state: "running" }));
+		h.emit(
+			summary({
+				state: "awaiting_review",
+				reviewReason: "hook",
+				latestHookActivity: {
+					activityText: null,
+					toolName: "ExitPlanMode",
+					toolInputSummary: null,
+					finalMessage: "Plano pronto, posso seguir?",
+					hookEventName: "Notification",
+					notificationType: "permission_prompt",
+					source: "claude",
+				},
+			}),
+		);
+		await vi.waitFor(() => expect(h.notifyReadyForReview).toHaveBeenCalled());
+		expect(h.notifyReadyForReview.mock.calls[0]?.[0]?.detail).toBe("ExitPlanMode: Plano pronto, posso seguir?");
+	});
+
+	it("still notifies when the card said nothing", async () => {
+		const h = harness();
+		h.emit(summary({ state: "running" }));
+		h.emit(summary({ state: "awaiting_review", reviewReason: "exit", exitCode: 0 }));
+		await vi.waitFor(() => expect(h.notifyReadyForReview).toHaveBeenCalled());
+		expect(h.notifyReadyForReview.mock.calls[0]?.[0]?.detail).toBeUndefined();
 	});
 });

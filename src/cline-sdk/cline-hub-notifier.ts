@@ -56,6 +56,11 @@ export interface ReadyForReviewNotification {
 	 * where, and can only broadcast or guess.
 	 */
 	workspacePath?: string;
+	/**
+	 * What the card is asking, when it said. Without it the notification can only send someone
+	 * to the board, which is the place they were not at.
+	 */
+	detail?: string;
 }
 
 export interface CardProgressNotification extends ReadyForReviewNotification {
@@ -159,8 +164,11 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): C
 		notifyReadyForReview(notification: ReadyForReviewNotification): Promise<void> {
 			return publish({
 				title: "Ready for review",
-				// The body is what a person reads on a phone, so it leads with what and where.
-				body: `${notification.taskTitle} — ${notification.workspaceName}`,
+				// The body is what a person reads on a phone, so it leads with what and where,
+				// then says what the card wants.
+				body: [`${notification.taskTitle} — ${notification.workspaceName}`, notification.detail]
+					.filter(Boolean)
+					.join("\n\n"),
 				taskId: notification.taskId,
 				workspacePath: notification.workspacePath,
 				// Never: this one asks the person for something, so it has to arrive on its own
