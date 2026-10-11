@@ -30,6 +30,7 @@ export interface ClineHubNotifyClient {
 		severity?: "info" | "warning" | "error";
 		source?: { workspacePath?: string; itemId?: string };
 		supersedesPrevious?: boolean;
+		awaitingAnswer?: boolean;
 	}): Promise<void>;
 	dispose(): Promise<void>;
 }
@@ -67,6 +68,8 @@ export interface ReadyForReviewNotification {
 	 * would say nothing.
 	 */
 	priority?: "high" | "medium" | "low";
+	/** The card is waiting on the person right now, so choices can be offered for it. */
+	awaitingAnswer?: boolean;
 }
 
 export interface CardProgressNotification extends ReadyForReviewNotification {
@@ -129,6 +132,7 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): C
 		taskId: string;
 		workspacePath?: string;
 		supersedesPrevious?: boolean;
+		awaitingAnswer?: boolean;
 	}): Promise<void> => {
 		let client: ClineHubNotifyClient | undefined;
 		try {
@@ -153,6 +157,7 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): C
 					itemId: payload.taskId,
 				},
 				...(payload.supersedesPrevious ? { supersedesPrevious: true } : {}),
+				...(payload.awaitingAnswer ? { awaitingAnswer: true } : {}),
 			});
 		} catch {
 			// Deliberately silent: a notification that fails must never surface as a board
@@ -185,8 +190,9 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): C
 					.join("\n\n"),
 				taskId: notification.taskId,
 				workspacePath: notification.workspacePath,
-				// Never: this one asks the person for something, so it has to arrive on its own
-				// instead of quietly replacing a status line.
+				awaitingAnswer: notification.awaitingAnswer,
+				// Never supersedes: this one asks the person for something, so it has to arrive
+				// on its own instead of quietly replacing a status line.
 			});
 		},
 		notifyCardProgress(notification: CardProgressNotification): Promise<void> {

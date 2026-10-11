@@ -27,7 +27,7 @@ import { resolveTaskTitle } from "../core/task-title";
 import type { TerminalSessionManager } from "../terminal/session-manager";
 import { type CardProgressState, resolveCardProgress } from "./card-progress-notification";
 import { shouldNotifyTaskReadyForReview } from "./ready-for-review-notification";
-import { describeReviewRequest } from "./review-request-detail";
+import { describeReviewRequest, isAwaitingAnswer } from "./review-request-detail";
 import { createWorkspaceMetadataMonitor } from "./workspace-metadata-monitor";
 import type { ResolvedWorkspaceStreamTarget, WorkspaceRegistry } from "./workspace-registry";
 
@@ -379,6 +379,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 		workspacePath: string | null,
 		taskId: string,
 		detail?: string,
+		awaitingAnswer?: boolean,
 	): Promise<void> => {
 		try {
 			const { taskTitle, workspaceName } = await resolveCardIdentity(workspaceId, workspacePath, taskId);
@@ -447,6 +448,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 			deps.workspaceRegistry.getWorkspacePathById(workspaceId),
 			summary.taskId,
 			describeReviewRequest(summary),
+			isAwaitingAnswer(summary),
 		);
 	};
 

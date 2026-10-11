@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { RuntimeTaskSessionSummary } from "../../src/core/api-contract";
-import { describeReviewRequest } from "../../src/server/review-request-detail";
+import { describeReviewRequest, isAwaitingAnswer } from "../../src/server/review-request-detail";
 
 function activity(patch: Record<string, unknown> = {}) {
 	return {
@@ -92,5 +92,63 @@ describe("describeReviewRequest", () => {
 	it("says nothing when the card said nothing", () => {
 		expect(describeReviewRequest(summary())).toBeUndefined();
 		expect(describeReviewRequest(summary({ latestHookActivity: activity({ finalMessage: "   " }) }))).toBeUndefined();
+	});
+});
+
+describe("isAwaitingAnswer", () => {
+	it("is true while a permission prompt is open", () => {
+		expect(
+			isAwaitingAnswer(
+				summary({
+					latestHookActivity: activity({
+						notificationType: "permission_prompt",
+						hookEventName: "Notification",
+					}),
+				}),
+			),
+		).toBe(true);
+	});
+
+	it("is false once the tool completed, however stale the notification type is", () => {
+		// Measured: notificationType sticks at "permission_prompt" long after the answer, while
+		// the hook event moves on. Trusting it meant offering buttons for a question already
+		// answered, and the person saw the same question twice.
+		for (const event of ["PostToolUse", "PostToolUseFailure", "SubagentStop", "Stop"]) {
+			expect(
+				isAwaitingAnswer(
+					summary({
+						latestHookActivity: activity({
+							notificationType: "permission_prompt",
+							hookEventName: event,
+						}),
+					}),
+				),
+			).toBe(false);
+		}
+	});
+
+	it("is false for anything that is not a prompt at all", () => {
+		expect(isAwaitingAnswer(summary())).toBe(false);
+		expect(isAwaitingAnswer(summary({ latestHookActivity: activity({ notificationType: "idle_prompt" }) }))).toBe(
+			false,
+		);
+	});
+});
+
+describe("what a card says after it answered", () => {
+	it("reports what it did instead of replaying the question", () => {
+		// "Devo gravar? 1) Gravar 2) Descartar" after the answer reads like a second ask.
+		const detail = describeReviewRequest(
+			summary({
+				latestHookActivity: activity({
+					notificationType: "permission_prompt",
+					hookEventName: "SubagentStop",
+					toolName: "AskUserQuestion",
+					activityText: "Completed AskUserQuestion: Devo gravar? — 1) Gravar 2) Descartar",
+					finalMessage: "descartado",
+				}),
+			}),
+		);
+		expect(detail).toBe("descartado");
 	});
 });
