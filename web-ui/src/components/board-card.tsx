@@ -2,7 +2,7 @@ import { Draggable } from "@hello-pangea/dnd";
 import { getRuntimeAgentCatalogEntry } from "@runtime-agent-catalog";
 import { formatClineToolCallLabel } from "@runtime-cline-tool-call-display";
 import { buildTaskWorktreeDisplayPath } from "@runtime-task-worktree-path";
-import { AlertCircle, AlertTriangle, Bot, GitBranch, Pencil, Play, RotateCcw, Trash2 } from "lucide-react";
+import { AlertCircle, AlertTriangle, Bot, GitBranch, Pencil, Play, RotateCcw, Tag, Trash2 } from "lucide-react";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -19,6 +19,7 @@ import type { RuntimeTaskSessionSummary } from "@/runtime/types";
 import { useTaskWorkspaceSnapshotValue } from "@/stores/workspace-metadata-store";
 import type { BoardCard as BoardCardModel, BoardColumnId } from "@/types";
 import { getTaskAutoReviewCancelButtonLabel } from "@/types";
+import { hasCardAttributes, resolvePriorityTone, resolveVisibleTags } from "@/utils/card-attributes-display";
 import { formatPathForDisplay } from "@/utils/path-display";
 import { useMeasure } from "@/utils/react-use";
 import {
@@ -284,6 +285,7 @@ export function BoardCard({
 		lastSessionActivityRef.current = rawSessionActivity;
 	}
 	const sessionActivity = rawSessionActivity ?? lastSessionActivityRef.current;
+	const visibleTags = useMemo(() => resolveVisibleTags(card.tags), [card.tags]);
 	const displayTitle = useMemo(
 		() => normalizePromptForDisplay(card.title) || truncateTaskPromptLabel(card.prompt),
 		[card.prompt, card.title],
@@ -723,6 +725,39 @@ export function BoardCard({
 										<Bot size={12} className="shrink-0" />
 										<span className="truncate">{taskAgentSettingsLabel}</span>
 									</span>
+								</div>
+							) : null}
+							{hasCardAttributes(card) ? (
+								<div className="mt-1 flex flex-wrap items-center gap-1">
+									{card.priority ? (
+										<span
+											className={cn(
+												"inline-flex items-center rounded-md border px-1.5 py-0.5 text-xs",
+												isTrashCard || resolvePriorityTone(card.priority) !== "urgent"
+													? "border-border bg-surface-1 text-text-tertiary"
+													: "border-status-orange/30 bg-status-orange/10 text-status-orange",
+											)}
+										>
+											{card.priority}
+										</span>
+									) : null}
+									{card.category ? (
+										<span className="inline-flex max-w-full items-center rounded-md border border-border bg-surface-1 px-1.5 py-0.5 text-text-tertiary text-xs">
+											<span className="truncate">{card.category}</span>
+										</span>
+									) : null}
+									{visibleTags.shown.map((tag) => (
+										<span
+											key={tag}
+											className="inline-flex max-w-full items-center rounded-md border border-border bg-surface-1 px-1.5 py-0.5 text-text-tertiary text-xs"
+										>
+											<Tag size={10} className="mr-1 shrink-0" />
+											<span className="truncate">{tag}</span>
+										</span>
+									))}
+									{visibleTags.overflow > 0 ? (
+										<span className="text-text-tertiary text-xs">+{visibleTags.overflow}</span>
+									) : null}
 								</div>
 							) : null}
 							{sessionActivity ? (

@@ -153,3 +153,46 @@ describe("createClineHubNotifier", () => {
 		expect(dispose).toHaveBeenCalledTimes(1);
 	});
 });
+
+describe("priority in the review notice", () => {
+	function capture() {
+		const sent: Array<{ title: string; body: string }> = [];
+		const notifier = createClineHubNotifier({
+			isEnabled: async () => true,
+			readDiscovery: async () => ({ url: "ws://x/hub", authToken: "t" }),
+			createClient: () => ({
+				connect: async () => undefined,
+				sendNotify: async (payload) => {
+					sent.push({ title: payload.title, body: payload.body });
+				},
+				dispose: async () => undefined,
+			}),
+		});
+		return { notifier, sent };
+	}
+
+	it("marks an urgent card so it can be triaged without opening the board", async () => {
+		const { notifier, sent } = capture();
+		await notifier.notifyReadyForReview({
+			taskId: "1",
+			taskTitle: "Cartão",
+			workspaceName: "kanban",
+			priority: "high",
+		});
+		expect(sent[0]?.body).toContain("[alta]");
+	});
+
+	it("marks nothing else, so the mark keeps meaning something", async () => {
+		// If every card were marked, the mark would say nothing.
+		for (const priority of ["medium", "low", undefined] as const) {
+			const { notifier, sent } = capture();
+			await notifier.notifyReadyForReview({
+				taskId: "1",
+				taskTitle: "Cartão",
+				workspaceName: "kanban",
+				priority,
+			});
+			expect(sent[0]?.body).not.toContain("[alta]");
+		}
+	});
+});

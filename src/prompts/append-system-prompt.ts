@@ -193,7 +193,7 @@ Parameters:
 Purpose: create a new task in \`backlog\`, with optional plan mode and auto-review behavior.
 
 Command:
-\`${kanbanCommand} task create [--title "<text>"] --prompt "<text>" [--project-path <path>] [--base-ref <branch>] [--start-in-plan-mode <true|false>] [--auto-review-enabled <true|false>] [--auto-review-mode commit|pr]\`
+\`${kanbanCommand} task create [--title "<text>"] --prompt "<text>" [--project-path <path>] [--base-ref <branch>] [--start-in-plan-mode <true|false>] [--auto-review-enabled <true|false>] [--auto-review-mode commit|pr] [--tags <a,b>] [--category <text>] [--priority high|medium|low]\`
 
 Parameters:
 - \`--title "<text>"\` optional task title. If omitted, Kanban derives one from the prompt.
@@ -203,13 +203,16 @@ Parameters:
 - \`--start-in-plan-mode <true|false>\` optional. Default false. Set true only when explicitly requested.
 - \`--auto-review-enabled <true|false>\` optional. Default false. Enables automatic action once task reaches review.
 - \`--auto-review-mode commit|pr\` optional auto-review action. Default \`commit\`.
+- \`--tags <a,b>\` optional comma-separated tags. Repeated spellings of one tag are merged.
+- \`--category <text>\` optional single category, e.g. bug | feature | infra.
+- \`--priority high|medium|low\` optional. Anything else is refused rather than guessed at.
 
 ## task update
 
 Purpose: update an existing task, including prompt, base ref, plan mode, and auto-review behavior.
 
 Command:
-\`${kanbanCommand} task update --task-id <task_id> [--title "<text>"] [--prompt "<text>"] [--project-path <path>] [--base-ref <branch>] [--start-in-plan-mode <true|false>] [--auto-review-enabled <true|false>] [--auto-review-mode commit|pr]\`
+\`${kanbanCommand} task update --task-id <task_id> [--title "<text>"] [--prompt "<text>"] [--project-path <path>] [--base-ref <branch>] [--start-in-plan-mode <true|false>] [--auto-review-enabled <true|false>] [--auto-review-mode commit|pr] [--tags <a,b>] [--category <text>] [--priority high|medium|low]\`
 
 Parameters:
 - \`--task-id <task_id>\` required task ID.
@@ -220,6 +223,7 @@ Parameters:
 - \`--start-in-plan-mode <true|false>\` optional replacement of plan-mode behavior.
 - \`--auto-review-enabled <true|false>\` optional replacement of auto-review toggle. Set false to cancel pending automatic review actions.
 - \`--auto-review-mode commit|pr\` optional replacement auto-review action.
+- \`--tags <a,b>\`, \`--category <text>\`, \`--priority high|medium|low\` optional replacements. Pass \`""\` to clear one; omitting it leaves the card's value alone.
 
 Notes:
 - Provide at least one field to change in addition to \`--task-id\`.
@@ -295,6 +299,21 @@ Command:
 Parameters:
 - \`--task-id <task_id>\` required task ID.
 - \`--project-path <path>\` optional workspace path. If not already registered in Kanban, it is auto-added for git repos.
+
+## task input
+
+Purpose: send text into a running task's agent session -- the answer to a question that task asked. Use it when a task is waiting on the person and the answer arrived somewhere else.
+
+Command:
+\`${kanbanCommand} task input --task-id <task_id> --text "<text>" [--project-path <path>]\`
+
+Parameters:
+- \`--task-id <task_id>\` required task ID.
+- \`--text "<text>"\` required text to send. For a task waiting on a choice, this is the option's number.
+- \`--project-path <path>\` optional workspace path. If not already registered in Kanban, it is auto-added for git repos.
+
+Notes:
+- A task with no running session is refused rather than queued.
 
 # Workflow Notes
 

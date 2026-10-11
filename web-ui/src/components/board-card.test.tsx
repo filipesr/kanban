@@ -201,6 +201,46 @@ describe("BoardCard", () => {
 		expect(nextCancelButton).toBeUndefined();
 	});
 
+	it("shows the card's tags, category and priority", async () => {
+		await act(async () => {
+			root.render(
+				<BoardCard
+					card={createCard({
+						tags: ["infra", "docs"],
+						category: "bug",
+						priority: "high",
+					})}
+					index={0}
+					columnId="backlog"
+				/>,
+			);
+		});
+
+		const text = container.textContent ?? "";
+		expect(text).toContain("infra");
+		expect(text).toContain("docs");
+		expect(text).toContain("bug");
+		expect(text).toContain("high");
+	});
+
+	it("counts the tags it cannot fit instead of wrapping into a wall", async () => {
+		await act(async () => {
+			root.render(<BoardCard card={createCard({ tags: ["a", "b", "c", "d", "e"] })} index={0} columnId="backlog" />);
+		});
+
+		expect(container.textContent).toContain("+2");
+	});
+
+	it("shows nothing extra for a card with no attributes", async () => {
+		// Every card written before these fields existed must look exactly as it did.
+		await act(async () => {
+			root.render(<BoardCard card={createCard()} index={0} columnId="backlog" />);
+		});
+
+		expect(container.textContent).not.toContain("+");
+		expect(container.querySelector(".flex-wrap")).toBeNull();
+	});
+
 	it("shows a loading state on the review done button while moving to done", async () => {
 		await act(async () => {
 			root.render(<BoardCard card={createCard()} index={0} columnId="review" isMoveToTrashLoading />);

@@ -61,6 +61,12 @@ export interface ReadyForReviewNotification {
 	 * to the board, which is the place they were not at.
 	 */
 	detail?: string;
+	/**
+	 * Carried so someone triaging on a phone can tell an urgent card from the rest without
+	 * opening the board. Only `high` is worth the room: if every card were marked, the mark
+	 * would say nothing.
+	 */
+	priority?: "high" | "medium" | "low";
 }
 
 export interface CardProgressNotification extends ReadyForReviewNotification {
@@ -166,7 +172,15 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): C
 				title: "Ready for review",
 				// The body is what a person reads on a phone, so it leads with what and where,
 				// then says what the card wants.
-				body: [`${notification.taskTitle} — ${notification.workspaceName}`, notification.detail]
+				body: [
+					[
+						notification.priority === "high" ? "[alta]" : undefined,
+						`${notification.taskTitle} — ${notification.workspaceName}`,
+					]
+						.filter(Boolean)
+						.join(" "),
+					notification.detail,
+				]
 					.filter(Boolean)
 					.join("\n\n"),
 				taskId: notification.taskId,

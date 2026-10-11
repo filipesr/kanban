@@ -20,6 +20,7 @@ import type {
 	RuntimeStateStreamTaskSessionsMessage,
 	RuntimeStateStreamWorkspaceMetadataMessage,
 	RuntimeStateStreamWorkspaceStateMessage,
+	RuntimeTaskPriority,
 	RuntimeTaskSessionSummary,
 } from "../core/api-contract";
 import { resolveTaskTitle } from "../core/task-title";
@@ -353,22 +354,24 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 		workspaceId: string,
 		workspacePath: string | null,
 		taskId: string,
-	): Promise<{ taskTitle: string; workspaceName: string }> => {
+	): Promise<{ taskTitle: string; workspaceName: string; priority?: RuntimeTaskPriority }> => {
 		let taskTitle = taskId;
 		let workspaceName = workspaceId;
+		let priority: RuntimeTaskPriority | undefined;
 		if (workspacePath) {
 			try {
 				const snapshot = await deps.workspaceRegistry.buildWorkspaceStateSnapshot(workspaceId, workspacePath);
 				const card = snapshot.board.columns.flatMap((column) => column.cards).find((entry) => entry.id === taskId);
 				if (card) {
 					taskTitle = resolveTaskTitle(card.title, card.prompt);
+					priority = card.priority;
 				}
 				workspaceName = basename(workspacePath) || workspaceId;
 			} catch {
 				// Keep the fallbacks.
 			}
 		}
-		return { taskTitle, workspaceName };
+		return { taskTitle, workspaceName, priority };
 	};
 
 	const notifyHubTaskReadyForReview = async (
