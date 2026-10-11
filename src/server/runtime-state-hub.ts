@@ -382,13 +382,15 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 		awaitingAnswer?: boolean,
 	): Promise<void> => {
 		try {
-			const { taskTitle, workspaceName } = await resolveCardIdentity(workspaceId, workspacePath, taskId);
+			const { taskTitle, workspaceName, priority } = await resolveCardIdentity(workspaceId, workspacePath, taskId);
 			await hubNotifier.notifyReadyForReview({
 				taskId,
 				taskTitle,
 				workspaceName,
 				workspacePath: workspacePath ?? undefined,
 				detail,
+				priority,
+				awaitingAnswer,
 			});
 		} catch {
 			// Notification is an accessory and must never surface as a board error.

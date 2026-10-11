@@ -41,6 +41,8 @@ function harness() {
 			workspaceName: string;
 			workspacePath?: string;
 			detail?: string;
+			priority?: string;
+			awaitingAnswer?: boolean;
 		}) => Promise<void>
 	>(async () => undefined);
 	const notifyCardProgress = vi.fn<
@@ -58,7 +60,14 @@ function harness() {
 		workspaceRegistry: {
 			getWorkspacePathById: () => REPO,
 			buildWorkspaceStateSnapshot: async () => ({
-				board: { columns: [{ id: "review", cards: [{ id: "461e5", title: "Cartão de teste" }] }] },
+				board: {
+					columns: [
+						{
+							id: "review",
+							cards: [{ id: "461e5", title: "Cartão de teste", priority: "high" }],
+						},
+					],
+				},
 			}),
 			resolveWorkspaceForStream: async () => null,
 			buildProjectsPayload: async () => ({ currentProjectId: null, projects: [] }),
@@ -192,5 +201,60 @@ describe("what the review notice tells someone away from the board", () => {
 		h.emit(summary({ state: "awaiting_review", reviewReason: "exit", exitCode: 0 }));
 		await vi.waitFor(() => expect(h.notifyReadyForReview).toHaveBeenCalled());
 		expect(h.notifyReadyForReview.mock.calls[0]?.[0]?.detail).toBeUndefined();
+	});
+});
+
+describe("what the hub actually hands the notifier", () => {
+	it("carries the card's priority and whether it is waiting", async () => {
+		// These travelled as far as the function signature and no further: the call site was
+		// never updated, so both were accepted and dropped. A test on the notifier alone could
+		// not see it, because it called the notifier directly and skipped the hub.
+		const h = harness();
+		h.emit(summary({ state: "running" }));
+		h.emit(
+			summary({
+				state: "awaiting_review",
+				reviewReason: "hook",
+				latestHookActivity: {
+					activityText: "Waiting for approval",
+					toolName: "AskUserQuestion",
+					toolInputSummary: null,
+					finalMessage: null,
+					hookEventName: "Notification",
+					notificationType: "permission_prompt",
+					source: "claude",
+				},
+			}),
+		);
+		await vi.waitFor(() => expect(h.notifyReadyForReview).toHaveBeenCalled());
+
+		const sent = h.notifyReadyForReview.mock.calls[0]?.[0];
+		expect(sent?.priority).toBe("high");
+		expect(sent?.awaitingAnswer).toBe(true);
+	});
+
+	it("says it is not waiting once the tool completed", async () => {
+		const h = harness();
+		h.emit(summary({ state: "running" }));
+		h.emit(
+			summary({
+				state: "awaiting_review",
+				reviewReason: "hook",
+				latestHookActivity: {
+					activityText: "Completed AskUserQuestion: Devo gravar? — 1) Gravar 2) Descartar",
+					toolName: "AskUserQuestion",
+					toolInputSummary: null,
+					finalMessage: "descartado",
+					hookEventName: "SubagentStop",
+					notificationType: "permission_prompt",
+					source: "claude",
+				},
+			}),
+		);
+		await vi.waitFor(() => expect(h.notifyReadyForReview).toHaveBeenCalled());
+
+		const sent = h.notifyReadyForReview.mock.calls[0]?.[0];
+		expect(sent?.awaitingAnswer).toBe(false);
+		expect(sent?.detail).toBe("descartado");
 	});
 });
