@@ -1,180 +1,186 @@
-# Plano — notificação de review fora do navegador
+# Plan — review notification outside the browser
 
 **Spec:** [docs/superpowers/specs/2026-10-10-kanban-hub-notify-design.md](../specs/2026-10-10-kanban-hub-notify-design.md)
-**Branch:** `feat/hub-notify-on-review` no fork `filipesr/kanban`
+**Branch:** `feat/hub-notify-on-review` in the `filipesr/kanban` fork
 
-## Restrições que valem para todas as tarefas
+## Constraints that hold for every task
 
-- **Node 20+**, `npm run install:all` antes de qualquer coisa; `npm run dev:full` sobe runtime
-  e UI juntos; o runtime fica em `http://127.0.0.1:3484`.
-- **A notificação é acessório.** Nenhuma falha dela pode derrubar o quadro, travar o agente ou
-  atrasar a transição do cartão. Hub fora do ar é caso normal, não exceção.
-- **Nada de mudança no SDK**: consumimos `@clinebot/core` do npm.
-- **Imports do SDK só por `src/cline-sdk/`**, que é a regra declarada no
+- **Node 20+**, `npm run install:all` before anything; `npm run dev:full` brings up the runtime
+  and the UI together; the runtime listens on `http://127.0.0.1:3484`.
+- **The notification is an accessory.** No failure of it may take the board down, stall an
+  agent, or delay a card's transition. A hub that is not running is a normal condition, not an
+  exception.
+- **No SDK changes**: we consume `@clinebot/core` from npm.
+- **SDK imports only through `src/cline-sdk/`**, which is the rule stated in
   `sdk-runtime-boundary.ts`.
-- `npm run lint` e `npm test` limpos antes de cada commit.
-- Commits em português não; este repositório é em inglês — **mensagens de commit e código em
-  inglês**, comentários em inglês.
+- `npm run lint` and `npm test` clean before every commit.
+- This repository is in English — **commit messages, code and comments in English**.
 
 ---
 
-## Tarefa 0 — o ambiente roda
+## Task 0 — the environment runs
 
-Sem isto nada mais existe, e é onde um ambiente de desenvolvimento alheio costuma falhar.
+Without this nothing else exists, and it is where someone else's development environment usually
+fails.
 
 - [ ] `npm run install:all`
-- [ ] `npm run dev:full`; confirmar runtime na 3484 e UI subindo
-- [ ] abrir o quadro do `partyshare` na build local e ver os cartões existentes
-- [ ] `npm test` e `npm run lint` na base limpa — **anotar o resultado**, porque é a régua para
-      saber se nós quebramos algo depois
+- [ ] `npm run dev:full`; confirm the runtime on 3484 and the UI coming up
+- [ ] open the `partyshare` board on the local build and see the existing cards
+- [ ] `npm test` and `npm run lint` on a clean tree — **write down the result**, because it is
+      the ruler for telling whether we broke something later
 
-**Critério:** quadro local abre e mostra o mesmo estado da versão instalada.
+**Done when:** the local board opens and shows the same state as the installed version.
 
 ---
 
-## Tarefa 1 — como o hub aceita um cliente (resolve o `hub_connect_failed`)
+## Task 1 — how the hub accepts a client (resolving `hub_connect_failed`)
 
-A tentativa de publicar `ui.notify` por um cliente avulso falhou com `hub_connect_failed`.
-Antes de escrever código de produção, descobrir o porquê.
+Publishing `ui.notify` from a standalone client failed with `hub_connect_failed`. Find out why
+before writing production code.
 
-- [ ] Ler em `@clinebot/core` como o `HubUIClient` autentica (`authToken` nas opções) e de onde
-      a CLI tira esse token
-- [ ] Reproduzir uma conexão bem-sucedida num script descartável
-- [ ] Com o conector de Telegram no ar, publicar um `ui.notify` e **observar se chega no
+- [ ] Read in `@clinebot/core` how `HubUIClient` authenticates (`authToken` in the options) and
+      where the CLI gets that token from
+- [ ] Reproduce a successful connection in a throwaway script
+- [ ] With a Telegram connector running, publish a `ui.notify` and **observe whether it reaches
       Telegram**
 
-**Esta tarefa responde a incógnita central do spec:** se chegar, a entrega é um PR só; se não
-chegar, é preciso mudar também o conector no `filipesr/cline`.
+**This task answers the spec's central unknown:** if it arrives, the work is one PR; if it does
+not, the connector in `filipesr/cline` has to change too.
 
-**Critério:** um `ui.notify` publicado à mão aparece em
-`~/.cline/data/db/hub-events-*.db`; e está registrado, por medição, se ele chega ou não ao
-Telegram.
+**Done when:** a hand-published `ui.notify` appears in `~/.cline/data/db/hub-events-*.db`, and
+whether it reaches Telegram is recorded by measurement.
 
 ---
 
-## Tarefa 2 — reproduzir a #308 (o bug que eles aceitam PR)
+## Task 2 — reproduce #308 (the bug they do accept PRs for)
 
-- [ ] Reproduzir: com notificação ligada, criar um cartão e deixá-lo ir para `review`;
-      confirmar que **nenhuma** notificação de navegador aparece
-- [ ] Rastrear o caminho: `broadcastTaskReadyForReview` →
-      `RuntimeStateStreamTaskReadyForReviewMessage` → consumo em `web-ui/src/` →
+- [ ] Reproduce: with notifications on, create a card and let it reach `review`; confirm that
+      **no** browser notification appears
+- [ ] Trace the path: `broadcastTaskReadyForReview` →
+      `RuntimeStateStreamTaskReadyForReviewMessage` → consumption in `web-ui/src/` →
       `canShowBrowserNotifications` / `getBrowserNotificationPermission`
-- [ ] Achar e escrever **onde** ele se perde (permissão não pedida? mensagem não consumida?
-      condição de corrida com o foco da aba?)
+- [ ] Find and write down **where** it is lost (permission never requested? message never
+      consumed? a race with tab focus?)
 
-**Critério:** uma frase que explica a causa, com o arquivo e a linha. Sem isso, não se conserta
-— se consertar sem saber a causa, não se sabe se consertou.
-
----
-
-## Tarefa 3 — consertar a #308, com teste
-
-- [ ] Teste que falha hoje e passa depois
-- [ ] O conserto
-- [ ] **Mutação**: desfazer o conserto e confirmar que o teste volta a falhar
-- [ ] `npm test` e `npm run lint` limpos
-
-**Critério:** notificação de navegador aparece quando o cartão entra em `review`. Este vira o
-**primeiro PR** para o upstream, na categoria que eles aceitam.
+**Done when:** one sentence explains the cause, with a file and a line. Without that there is
+nothing to fix — and a fix made without knowing the cause is a fix nobody can trust.
 
 ---
 
-## Tarefa 4 — o notificador do hub
+## Task 3 — fix #308, with a test
 
-- [ ] `src/cline-sdk/cline-hub-notifier.ts`: embrulha `HubUIClient`, conexão preguiçosa,
-      **engole qualquer erro** (hub fora do ar é normal), sem bloquear quem chama
-- [ ] Teste: notificador com hub inexistente **não lança** e não atrasa o chamador
-- [ ] `broadcastTaskReadyForReview` chama o notificador além do broadcast atual
-- [ ] Teste: a transição para `review` publica `ui.notify` com título e corpo úteis
-      (projeto, título do cartão, id)
-- [ ] **Mutação**: derrubar o hub no meio e confirmar que o cartão transita normalmente
+- [ ] A test that fails today and passes afterwards
+- [ ] The fix
+- [ ] **Mutation**: undo the fix and confirm the test fails again
+- [ ] `npm test` and `npm run lint` clean
 
-**Critério:** cartão em `review` gera `ui.notify` no hub, e com o hub desligado nada quebra.
+**Done when:** the browser notification appears as a card enters `review`. This becomes the
+**first PR** upstream, in the category they accept.
 
 ---
 
-## Tarefa 5 — a configuração de destino
+## Task 4 — the hub notifier
 
-- [ ] `readyForReviewNotificationsEnabled` passa a aceitar destino (`browser`, `hub`, ambos),
-      com **default idêntico ao de hoje**
-- [ ] Migração: configuração booleana antiga continua válida
-- [ ] Interface: a opção existente vira escolha de destino
-- [ ] Teste de cada combinação, inclusive "nenhum"
+- [ ] `src/cline-sdk/cline-hub-notifier.ts`: wraps `HubUIClient`, connects lazily, **swallows
+      every error** (a hub that is down is normal), never blocks its caller
+- [ ] Test: the notifier against a hub that does not exist **does not throw** and does not delay
+      the caller
+- [ ] `broadcastTaskReadyForReview` calls the notifier in addition to the existing broadcast
+- [ ] Test: the transition to `review` publishes `ui.notify` with a useful title and body
+      (project, card title, id)
+- [ ] **Mutation**: kill the hub mid-flight and confirm the card still transitions
 
-**Critério:** quem já usava não percebe diferença; quem liga `hub` recebe fora do navegador.
-
----
-
-## Tarefa 6 — a ponta do Telegram
-
-Depende do resultado da Tarefa 1.
-
-- [ ] **Se o conector já assina `ui.notify`:** teste de ponta a ponta — cartão em review,
-      mensagem no celular. Acabou.
-- [ ] **Se não assina:** mudança no fork `filipesr/cline` para o conector encaminhar
-      `ui.notify` para a conversa, com teste; e então o teste de ponta a ponta.
-
-**Critério:** o dono recebe no celular que um cartão precisa dele, sem o quadro aberto.
+**Done when:** a card in `review` produces `ui.notify` on the hub, and nothing breaks with the
+hub switched off.
 
 ---
 
-## Tarefa 7 — levar para fora
+## Task 5 — the destination setting
 
-- [ ] **PR da #308** para `cline/kanban`, só com o conserto do bug e o teste (sem o spec, sem
-      o plano, sem a feature)
-- [ ] **Feature Request discussion** com as medições do spec e link para a implementação
-      funcionando no fork
-- [ ] O fork fica utilizável pelo dono independentemente do que o upstream decidir
+- [ ] `readyForReviewNotificationsEnabled` starts accepting a destination (`browser`, `hub`,
+      both), with a **default identical to today's**
+- [ ] Migration: the old boolean setting stays valid
+- [ ] UI: the existing toggle becomes a destination choice
+- [ ] A test for each combination, including "neither"
 
----
-
-## Depois (fora deste plano)
-
-- **Responder/aprovar o cartão a partir do Telegram** (item 2 do pedido original): o transporte
-  existe, falta correlacionar a resposta ao id do cartão.
-- **Tags, categorias e prioridade nos cartões** (item 3): independente, só modelo e interface;
-  mas é **feature**, então nasce no fork e vai para discussão, não para PR.
+**Done when:** anyone already using it notices no difference, and anyone enabling `hub` is
+reached outside the browser.
 
 ---
 
-# Resultado da Tarefa 1 — medido em 2026-10-10
+## Task 6 — the Telegram end
 
-**O conector de Telegram NÃO encaminha `ui.notify`.** Logo, a entrega são **dois PRs**.
+Depends on the result of Task 1.
 
-Como se provou, por três caminhos independentes:
+- [ ] **If the connector already subscribes to `ui.notify`:** an end-to-end test — card in
+      review, message on the phone. Done.
+- [ ] **If it does not:** a change in the `filipesr/cline` fork so the connector forwards
+      `ui.notify` into the conversation, with a test; then the end-to-end test.
 
-1. **Empírico.** Dois `ui.notify` publicados no hub, autenticados (17:19 e 17:31 UTC), ambos
-   confirmados em `hub_events`. Nada chegou ao Telegram. O conector estava no ar e **registrado
-   como cliente do hub** (`type=cli name=telegram connector`), então o problema não é conexão.
-2. **Busca no fonte.** Dos 10 arquivos de `cline/cline` que mencionam `ui.notify`, **nenhum** é
-   de conector. Os conectores vivem em `apps/cli/src/connectors/` e não o referenciam.
-3. **Declarado em comentário.** `apps/cli/src/main.ts:1227-1229`, sobre o modo `--zen`:
-   *"completion is delivered via the hub's existing ui.notify broadcast (picked up by the
-   menubar app when installed)"*.
-
-## O que isso muda, e melhora, no argumento upstream
-
-O `--zen` já é "dispara no hub e me avise quando terminar". Hoje esse aviso só existe para quem
-instalou o app de barra de menu — macOS, e opcional. **Um conector assinando `ui.notify` não é
-feature nova: é a entrega que falta a um recurso que já existe**, e passa a servir qualquer
-pessoa com Telegram, Slack ou Discord.
-
-Isso vale para a discussão upstream mais que o caso do Kanban: o Kanban é um consumidor novo do
-mesmo barramento; o `--zen` é um consumidor que já está lá, mudo.
-
-## Consequência para o plano
-
-- **Tarefa 6 deixa de ser "teste de ponta a ponta"** e passa a ser uma mudança no fork
-  `filipesr/cline`: o conector assina `ui.notify` e encaminha para a conversa.
-- O SDK **é** público, dentro do monorepo `cline/cline` (`sdk/packages/core/src/hub/...`) — a
-  busca inicial por `cline/sdk-wip` falhou porque é só o `repository.url` do pacote npm.
+**Done when:** the owner is told on their phone that a card needs them, without the board open.
 
 ---
 
-# Resultado do teste de ponta a ponta (10/10/2026, 16h)
+## Task 7 — taking it outside
 
-Ciclo fechado e provado com disparo real: cartão → review → hub → conector → tópico do Telegram.
-A evidência é o par de registros a um segundo de distância:
+- [ ] **The #308 PR** to `cline/kanban`, carrying only the bug fix and its test (no spec, no
+      plan, no feature)
+- [ ] **A Feature Request discussion** with the spec's measurements and a link to the working
+      implementation in the fork
+- [ ] The fork stays usable by its owner whatever upstream decides
+
+---
+
+## Later (outside this plan)
+
+- **Answering or approving a card from Telegram** (item 2 of the original request): the
+  transport exists; what is missing is correlating the reply to a card id.
+- **Tags, categories and priority on cards** (item 3): independent, only model and UI; but it is
+  a **feature**, so it starts in the fork and goes to a discussion, not a PR.
+
+---
+
+# Result of Task 1 — measured 2026-10-10
+
+**The Telegram connector does NOT forward `ui.notify`.** So the work is **two PRs**.
+
+Proven three independent ways:
+
+1. **Empirically.** Two `ui.notify` published to the hub, authenticated (17:19 and 17:31 UTC),
+   both confirmed in `hub_events`. Nothing reached Telegram. The connector was running and
+   **registered as a hub client** (`type=cli name=telegram connector`), so this is not a
+   connection problem.
+2. **Searching the source.** Of the 10 files in `cline/cline` that mention `ui.notify`, **none**
+   belongs to a connector. The connectors live in `apps/cli/src/connectors/` and never
+   reference it.
+3. **Stated in a comment.** `apps/cli/src/main.ts:1227-1229`, about `--zen` mode: *"completion
+   is delivered via the hub's existing ui.notify broadcast (picked up by the menubar app when
+   installed)"*.
+
+## What this changes, and improves, in the upstream argument
+
+`--zen` already means "fire it at the hub and tell me when it is done". Today that telling only
+exists for whoever installed the menubar app — macOS, and optional. **A connector subscribing
+to `ui.notify` is not a new feature: it is the missing delivery for one that already exists**,
+and it starts serving anyone with Telegram, Slack or Discord.
+
+That matters upstream more than the Kanban case does: Kanban is a new consumer of the same bus;
+`--zen` is a consumer already there, mute.
+
+## Consequence for the plan
+
+- **Task 6 stops being "an end-to-end test"** and becomes a change in the `filipesr/cline` fork:
+  the connector subscribes to `ui.notify` and forwards it into the conversation.
+- The SDK **is** public, inside the `cline/cline` monorepo (`sdk/packages/core/src/hub/...`) —
+  the initial search for `cline/sdk-wip` failed because that is only the npm package's
+  `repository.url`.
+
+---
+
+# Result of the end-to-end test (2026-10-10, 16:00)
+
+The loop closed and was proven by a real run: card → review → hub → connector → Telegram topic.
+The evidence is the pair of records one second apart:
 
 ```
 hub_events  16:47:55  ui.notify  {"title":"Ready for review",
@@ -184,47 +190,47 @@ hub_events  16:47:55  ui.notify  {"title":"Ready for review",
 cline.log   16:47:56  Telegram notification delivered  telegram:-1004378402573:49
 ```
 
-## Três defeitos que 209 + 598 testes verdes não pegavam
+## Three defects that 209 + 598 green tests did not catch
 
-Nenhum é erro de lógica. Todos são da classe "o programa encontra o mundo", e todos estavam na
-costura entre peças que, isoladas, estavam certas.
+None is a logic error. All are of the "program meets the world" kind, and all lived in the seam
+between pieces that were each correct in isolation.
 
-**1. Método inventado, escondido por um molde** (`cline`, conector).
-A interface declarava `subscribe`; `HubUIClient` tem `subscribeUI`. Um `as unknown as`
-silenciou a divergência, e todos os testes passavam contra um dublê com a forma errada. O
-conector em execução morria com `client.subscribe is not a function` e a inscrição nunca
-existia. Corrigido sem molde; o teste agora atribui a classe real à interface, e o `tsc`
-reclama se voltarem a divergir.
+**1. A method that did not exist, hidden by a cast** (`cline`, connector).
+The interface declared `subscribe`; `HubUIClient` has `subscribeUI`. An `as unknown as` silenced
+the mismatch, and every test passed against a fake with the invented shape. The running
+connector died with `client.subscribe is not a function` and the subscription never existed.
+Fixed without the cast; a test now assigns the real class to the interface, so `tsc` complains
+if they drift again.
 
-**2. A notificação existia só num dos dois runtimes** (`kanban`).
-O bloco vivia em `trackClineTaskSessionService`. Cartão com agente de terminal — o padrão de
-`agentId: "claude"`, que é o que se usa aqui — ia para review em silêncio. A funcionalidade
-não podia disparar para esse público. A decisão passou a viver num ponto só.
+**2. The notification existed in only one of the two runtimes** (`kanban`).
+The block lived in `trackClineTaskSessionService`. A card running a terminal agent — the default
+for `agentId: "claude"`, which is what is used here — went to review in silence. The feature
+could not fire for that audience at all. The decision now lives in one place.
 
-**3. A notificação anunciava a worktree, não o repositório** (`kanban`).
-Cartão roda em worktree descartável sob `~/.cline/worktrees/<id>/<repo>`. Nada se liga a uma
-worktree: nem aba de navegador, nem conversa de chat. O aviso ia para um endereço inexistente
-e o roteamento, que entrega em nenhum lugar quando nada casa, ficava mudo. Passa a anunciar o
-repositório do workspace.
+**3. The notification announced the worktree, not the repository** (`kanban`).
+A card runs in a throwaway worktree under `~/.cline/worktrees/<id>/<repo>`. Nothing is bound to
+a worktree: no browser tab, no chat conversation. The notice was addressed somewhere that does
+not exist, and the routing — which delivers nowhere when nothing matches — stayed silent. It
+now announces the workspace's repository.
 
-## Uma armadilha de diagnóstico, não de funcionalidade
+## A diagnosis trap, not a feature one
 
-`resolveClineBuildEnv()` devolve `development` quando `NODE_ENV=development`, e o `dev:full` do
-Kanban força isso. O notificador então procura `locks/hub/development.json`, que não existe, e
-retorna calado — por contrato, ele nunca lança e nunca registra. Em instalação real os
-ambientes coincidem e não há problema; em desenvolvimento, rodar com `CLINE_BUILD_ENV=production`
-resolve.
+`resolveClineBuildEnv()` returns `development` when `NODE_ENV=development`, and Kanban's
+`dev:full` forces that. The notifier then looks for `locks/hub/development.json`, which does not
+exist, and returns quietly — by contract it never throws and never logs. In a real installation
+the environments match and there is no problem; in development, running with
+`CLINE_BUILD_ENV=production` resolves it.
 
-O custo disso foi real: duas rodadas inteiras de diagnóstico. O silêncio total do notificador
-protege o board de ruído, mas torna "desligado", "hub ausente" e "falhou ao conectar"
-indistinguíveis. Se isso for para upstream, vale propor uma costura de diagnóstico opcional.
+The cost was real: two full rounds of diagnosis. The notifier's total silence protects the board
+from noise, but it makes "disabled", "no hub" and "failed to connect" indistinguishable. If this
+goes upstream, an optional diagnostic seam is worth proposing.
 
-## Ligação local usada no teste
+## The local wiring used for the test
 
-- **O Kanban não precisou do SDK recompilado.** Tipos são de compilação; `sendNotify` repassa o
-  payload inteiro e o servidor do hub também (`envelope.payload ?? {}`), então o campo `source`
-  atravessa intacto contra o `@clinebot/core` publicado.
-- **O conector precisou.** Rodando do fonte do fork, o `bun` resolve os workspaces mas os
-  pacotes apontam para `dist/`: `bun run build:sdk` no monorepo, uma vez.
-- Conector do fork subido com os argumentos que o CLI instalado já havia persistido em
-  `~/.cline/data/db/connectors.db`, para não passar o token em linha de comando.
+- **Kanban did not need the SDK rebuilt.** Types are compile-time only; `sendNotify` forwards
+  the whole payload and so does the hub server (`envelope.payload ?? {}`), so the `source` field
+  survives intact against the published `@clinebot/core`.
+- **The connector did.** Running from the fork's source, `bun` resolves the workspaces but the
+  packages point at `dist/`: `bun run build:sdk` in the monorepo, once.
+- The fork's connector was started with the arguments the installed CLI had already persisted in
+  `~/.cline/data/db/connectors.db`, to keep the token off the command line.

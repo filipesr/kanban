@@ -1,109 +1,112 @@
-# Notificação de "pronto para revisão" fora do navegador — design
+# Ready-for-review notification outside the browser — design
 
-**Data:** 2026-10-10 · **Repositório:** fork `filipesr/kanban` (upstream `cline/kanban` 0.1.70)
+**Date:** 2026-10-10 · **Repository:** fork `filipesr/kanban` (upstream `cline/kanban` 0.1.70)
 
-## O problema
+## The problem
 
-Um cartão que termina e entra em **Review** só avisa por **notificação de navegador**. Isso
-exige o quadro aberto numa aba, na mesma máquina — e contradiz a promessa do produto: rodar
-muitos agentes em paralelo é, por construção, algo que você **não** está olhando.
+A card that finishes and enters **Review** announces itself only through a **browser
+notification**. That requires the board open in a tab, on the same machine — and it contradicts
+the product's own promise: running many agents in parallel is, by construction, something you
+are **not** watching.
 
-Pior: esse único caminho de entrega está quebrado. [#308](https://github.com/cline/kanban/issues/308)
-(bug, aberta desde abril, 0.1.60) e [#284](https://github.com/cline/kanban/issues/284) relatam
-que a notificação não aparece mesmo com a opção ligada.
+Worse, that single delivery path is broken.
+[#308](https://github.com/cline/kanban/issues/308) (a bug, open since April, 0.1.60) and
+[#284](https://github.com/cline/kanban/issues/284) both report the notification never appearing
+even with the setting on.
 
-Medido nesta máquina em 2026-10-10 (macOS, `cline` 3.0.70, `kanban` 0.1.70, provedor
-`claude-code`): um cartão rodou uma tarefa real, moveu para **Review** e esperou resposta
-humana; responder no cartão o fez retomar. Em nenhum momento houve notificação fora da aba.
+Measured on this machine on 2026-10-10 (macOS, `cline` 3.0.70, `kanban` 0.1.70, `claude-code`
+provider): a card ran a real task, moved to **Review** and waited for a human answer; replying
+on the card made it resume. At no point was there a notification outside the tab.
 
-## O que já existe, e o que falta
+## What exists already, and what is missing
 
-| peça | estado |
+| piece | state |
 |---|---|
-| conceito de notificação de review | **existe** (`readyForReviewNotificationsEnabled`) |
-| entrega | **só navegador**, e quebrada (#308) |
-| barramento do hub do Cline | **existe**: `HubUIClient.sendNotify()` publica `ui.notify`, o hub difunde a todos os assinantes |
-| conectores Telegram/Slack/Discord na CLI | **existem** e são **bidirecionais** |
-| Kanban → hub | **não existe**: o banco de eventos do hub (`~/.cline/data/db/hub-events-*.db`) recebe `ui.notify`, `session.updated`, `tool.started` e `run.completed` das sessões da CLI, e **nenhum** evento do Kanban |
-| Kanban depende de `@clinebot/core` | **sim** — `src/cline-sdk/` já faz essa fronteira |
+| the notion of a review notification | **exists** (`readyForReviewNotificationsEnabled`) |
+| delivery | **browser only**, and broken (#308) |
+| the Cline hub's event bus | **exists**: `HubUIClient.sendNotify()` publishes `ui.notify`, the hub broadcasts it to every subscriber |
+| Telegram/Slack/Discord connectors in the CLI | **exist**, and are **bidirectional** |
+| Kanban → hub | **does not exist**: the hub's event store (`~/.cline/data/db/hub-events-*.db`) holds `ui.notify`, `session.updated`, `tool.started` and `run.completed` from CLI sessions, and **nothing** from Kanban |
+| Kanban depends on `@clinebot/core` | **yes** — `src/cline-sdk/` already draws that boundary |
 
-**Falta apenas o fio entre o Kanban e o hub.**
+**All that is missing is the wire between Kanban and the hub.**
 
-## Objetivo
+## Goal
 
-Quando um cartão entra em `review`, quem precisa saber fica sabendo **onde estiver** — pelo
-canal que a pessoa já usa (Telegram, Slack, Discord), sem o quadro aberto.
+When a card enters `review`, whoever needs to know finds out **wherever they are**, through the
+channel they already use (Telegram, Slack, Discord), without the board open.
 
-### Fora de escopo (por ora)
+### Out of scope (for now)
 
-- Responder/aprovar o cartão **a partir** da conversa. O transporte existe (os conectores são
-  bidirecionais), mas exige correlacionar a resposta ao id do cartão. Fica para um segundo
-  passo, depois que a notificação estiver provada.
-- Qualquer mudança no SDK (`cline/sdk-wip` não é público; consumimos `@clinebot/core` do npm).
+- Answering or approving the card **from** the conversation. The transport exists — the
+  connectors are bidirectional — but it needs the reply correlated to a card id. A second step,
+  once the notification itself is proven.
+- Any change to the SDK (`cline/sdk-wip` is not public; we consume `@clinebot/core` from npm).
 
-## Desenho
+## Design
 
-### Ponto de inserção
+### Insertion point
 
-O fluxo atual, achado no fonte:
+The current flow, found in the source:
 
 ```
-src/server/runtime-state-hub.ts:533   detecta tarefa pronta
+src/server/runtime-state-hub.ts:533   detects a task is ready
                               :325   broadcastTaskReadyForReview(workspaceId, taskId)
-                                     └─ emite no stream do runtime → só o navegador ouve
+                                     └─ emits on the runtime stream → only the browser hears it
 ```
 
-A mudança é **nessa função**, que já é o ponto único por onde o evento passa.
+The change goes **in that function**, which is already the single point the event passes through.
 
-### Três peças
+### Three pieces
 
-1. **`src/cline-sdk/cline-hub-notifier.ts`** (novo). Embrulha o `HubUIClient` de
-   `@clinebot/core`. Conecta preguiçosamente, na primeira notificação, e **falha em silêncio**
-   se o hub não estiver no ar: notificação nunca pode derrubar o quadro nem travar o agente.
-   Entra em `src/cline-sdk/` porque o `sdk-runtime-boundary.ts` manda centralizar ali todo
-   import do SDK, "so the rest of Kanban stays decoupled from the SDK package layout".
+1. **`src/cline-sdk/cline-hub-notifier.ts`** (new). Wraps `HubUIClient` from `@clinebot/core`.
+   Connects lazily, on the first notification, and **fails silently** when the hub is not
+   running: a notification must never take the board down or stall an agent. It lives in
+   `src/cline-sdk/` because `sdk-runtime-boundary.ts` requires every SDK import to be
+   centralised there, "so the rest of Kanban stays decoupled from the SDK package layout".
 
-2. **`broadcastTaskReadyForReview`** passa a chamar o notificador **além** do broadcast atual.
-   O caminho do navegador não muda.
+2. **`broadcastTaskReadyForReview`** calls the notifier **in addition to** the existing
+   broadcast. The browser path does not change.
 
-3. **Configuração**: `readyForReviewNotificationsEnabled` (booleano) vira um destino —
-   `browser`, `hub`, ou ambos. **Default idêntico ao de hoje**, para não mudar nada para quem
-   já usa.
+3. **Configuration**: `readyForReviewNotificationsEnabled` (a boolean) becomes a destination —
+   `browser`, `hub`, or both. **The default matches today's behaviour exactly**, so nothing
+   changes for anyone already using it.
 
-### A incógnita que define o tamanho da entrega
+### The unknown that decides how big this is
 
-Não sabemos se o conector de Telegram **assina** `ui.notify`. A API documenta que o hub
-difunde "to all subscribers (e.g. the menu bar app)" — os assinantes conhecidos são clientes
-de interface.
+We do not know whether the Telegram connector **subscribes** to `ui.notify`. The API documents
+that the hub broadcasts "to all subscribers (e.g. the menu bar app)" — and the known
+subscribers are UI clients.
 
-- **Se assina:** a entrega inteira é uma mudança só, neste repositório.
-- **Se não assina:** acrescenta uma mudança no `filipesr/cline` (fork da CLI, também público)
-  para o conector encaminhar.
+- **If it subscribes:** the whole delivery is one change, in this repository.
+- **If it does not:** it adds a change in `filipesr/cline` (the CLI fork, also public) so the
+  connector forwards it.
 
-Uma tentativa de publicar `ui.notify` por um cliente avulso falhou com `hub_connect_failed`,
-provavelmente por exigir token — resolver isso é o primeiro passo do plano.
+An attempt to publish `ui.notify` from a standalone client failed with `hub_connect_failed`,
+most likely because a token is required. Resolving that is the first step of the plan.
 
-## Estratégia de contribuição
+## Contribution strategy
 
-O `CONTRIBUTING.md` é explícito: **"We are not currently accepting feature PRs"**. Eles aceitam
-compatibilidade entre plataformas, compatibilidade de agentes, **correção de bugs** e testes.
+`CONTRIBUTING.md` is explicit: **"We are not currently accepting feature PRs"**. They do accept
+cross-platform compatibility, agent compatibility, **bug fixes** and tests.
 
-Por isso a entrega se divide em três, em ordem de aceitação provável:
+So the work splits in three, ordered by how likely each is to be accepted:
 
-1. **Correção da #308** (categoria aceita). Investigar por que a notificação de navegador não
-   dispara e consertar, com teste. É o mesmo código deste design, então a investigação serve
-   aos dois.
-2. **A integração com o hub no fork**, para uso imediato do dono. Não depende de aprovação
-   de ninguém.
-3. **Feature Request discussion** (não issue, não PR), com as medições deste documento e um
-   link para a implementação no fork — que é o argumento mais forte que existe: funciona, e
-   dá para ver.
+1. **Fixing #308** (an accepted category). Find out why the browser notification does not fire
+   and fix it, with a test. It is the same code this design touches, so the investigation serves
+   both.
+2. **The hub integration in the fork**, for the owner's immediate use. It depends on nobody's
+   approval.
+3. **A Feature Request discussion** (not an issue, not a PR), carrying the measurements in this
+   document and a link to the implementation in the fork — which is the strongest argument
+   available: it works, and you can see it.
 
-## Como se prova que funciona
+## How this is proven
 
-- Um cartão que entra em `review` gera `ui.notify` no hub — verificável em
+- A card entering `review` produces `ui.notify` on the hub, verifiable in
   `~/.cline/data/db/hub-events-*.db`.
-- Com um conector de Telegram no ar, a mensagem chega no celular.
-- Com o hub **desligado**, o quadro continua funcionando e o cartão transita normalmente.
-  Este é o teste que importa mais: a notificação é acessório, não pode virar dependência.
-- O caminho do navegador continua como antes quando o destino é `browser`.
+- With a Telegram connector running, the message arrives on the phone.
+- With the hub **switched off**, the board keeps working and the card transitions normally.
+  This is the test that matters most: the notification is an accessory and must never become a
+  dependency.
+- The browser path behaves as before when the destination is `browser`.
