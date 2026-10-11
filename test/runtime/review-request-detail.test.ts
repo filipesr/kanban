@@ -185,3 +185,36 @@ describe("what a card says after it answered", () => {
 		expect(detail).toBe("descartado");
 	});
 });
+
+describe("a card that is neither asking nor finished", () => {
+	it("says nothing rather than replaying its last tool call", () => {
+		// Seen in use: the second notice read "Completed AskUserQuestion: Deve gravar? — 1)
+		// Gravar 2) Descartar", which is a question the person had already answered.
+		expect(
+			describeReviewRequest(
+				summary({
+					latestHookActivity: activity({
+						hookEventName: "PostToolUse",
+						toolName: "AskUserQuestion",
+						activityText: "Completed AskUserQuestion: Deve gravar? — 1) Gravar 2) Descartar",
+						finalMessage: null,
+					}),
+				}),
+			),
+		).toBeUndefined();
+	});
+
+	it("still says what it concluded when it concluded something", () => {
+		expect(
+			describeReviewRequest(
+				summary({
+					latestHookActivity: activity({
+						hookEventName: "SubagentStop",
+						activityText: "Final: feito",
+						finalMessage: "feito",
+					}),
+				}),
+			),
+		).toBe("feito");
+	});
+});

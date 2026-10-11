@@ -56,11 +56,12 @@ export function describeReviewRequest(summary: RuntimeTaskSessionSummary): strin
 		return clip(warning);
 	}
 	const awaiting = isAwaitingAnswer(summary);
-	// A card that already acted should say what it did, not replay the question it asked --
-	// repeating "Devo gravar? 1) Gravar 2) Descartar" after the answer reads like a second ask.
+	// A card that is not asking has only one thing worth saying: what it concluded. Its current
+	// tool call is not that -- "Completed AskUserQuestion: Devo gravar? 1) Gravar 2) Descartar"
+	// replays a question that was already answered, and reads as being asked twice.
 	const text = awaiting
 		? activity?.activityText?.trim() || activity?.finalMessage?.trim()
-		: activity?.finalMessage?.trim() || activity?.activityText?.trim();
+		: activity?.finalMessage?.trim();
 	if (!text) {
 		return undefined;
 	}
