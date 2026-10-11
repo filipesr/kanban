@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { HubUIClient, readHubDiscovery, resolveClineDataDir } from "@clinebot/core";
 import { resolveClineBuildEnv } from "@clinebot/shared";
 import { loadGlobalRuntimeConfig } from "../config/runtime-config";
+import { resolveReadyForReviewTitle } from "../server/review-request-detail";
 
 /**
  * Publishes "a card needs you" to the Cline hub, so any connected subscriber can deliver it.
@@ -174,7 +175,7 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): C
 	return {
 		notifyReadyForReview(notification: ReadyForReviewNotification): Promise<void> {
 			return publish({
-				title: "Ready for review",
+				title: resolveReadyForReviewTitle(notification.awaitingAnswer),
 				// The body is what a person reads on a phone, so it leads with what and where,
 				// then says what the card wants.
 				body: [

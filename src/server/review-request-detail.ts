@@ -47,6 +47,39 @@ function clip(value: string): string {
 	return `${base.trimEnd()}…`;
 }
 
+/**
+ * What to say about a card that reached review with nothing recorded to say.
+ *
+ * Returning nothing here is what made the worst failure in this whole path invisible: a card
+ * whose agent stopped having done no work announced "Ready for review" with an empty body,
+ * which is exactly what a finished card with a terse agent looks like. Observed live -- the
+ * card wrote no file, left no transcript and registered no session, and the notification was
+ * indistinguishable from success.
+ *
+ * Silence is therefore reported as silence. A card still asking is left alone: its question is
+ * already the body, and this would only talk over it.
+ */
+function describeSilence(summary: RuntimeTaskSessionSummary, awaiting: boolean): string | undefined {
+	if (awaiting) {
+		return undefined;
+	}
+	// A card mid-flight has an activity even without a conclusion -- a tool name, a line of
+	// what it is doing. That one is genuinely better left alone: replaying its last tool call
+	// is how a question the person had already answered got announced a second time. Only a
+	// card with nothing recorded anywhere has silence worth reporting.
+	const activity = summary.latestHookActivity;
+	const recorded = [activity?.activityText, activity?.toolName, activity?.finalMessage].some((value) => value?.trim());
+	if (recorded) {
+		return undefined;
+	}
+	const exitCode = summary.exitCode;
+	// A non-zero exit is the one hard fact available; zero says nothing a reader can use, and
+	// no code at all means the runtime never reported one.
+	return exitCode !== null && exitCode !== 0
+		? `Stopped with exit ${exitCode} and reported nothing.`
+		: "Stopped without reporting anything.";
+}
+
 export function describeReviewRequest(summary: RuntimeTaskSessionSummary): string | undefined {
 	const activity = summary.latestHookActivity;
 	// A failure explains itself through the warning the runtime recorded; nothing the agent
@@ -63,11 +96,23 @@ export function describeReviewRequest(summary: RuntimeTaskSessionSummary): strin
 		? activity?.activityText?.trim() || activity?.finalMessage?.trim()
 		: activity?.finalMessage?.trim();
 	if (!text) {
-		return undefined;
+		return describeSilence(summary, awaiting);
 	}
 	// Naming the tool matters for a permission prompt: "may I run Bash" and "may I leave plan
 	// mode" are different enough decisions that the answer depends on which one it is.
 	const tool = activity?.toolName?.trim();
 	const prefix = awaiting && tool ? `${tool}: ` : "";
 	return clip(`${prefix}${text}`);
+}
+
+/**
+ * The headline of the notification, which is the only part a phone shows before it is opened.
+ *
+ * "Ready for review" is true of a card that finished and false of one that stopped to ask: it
+ * tells the person the work is done and waiting on their reading, when in fact nothing moves
+ * until they answer. Observed live -- a card asked a question, the notification announced it as
+ * ready for review, and the question itself was below the fold.
+ */
+export function resolveReadyForReviewTitle(awaitingAnswer: boolean | undefined): string {
+	return awaitingAnswer ? "Waiting on your answer" : "Ready for review";
 }

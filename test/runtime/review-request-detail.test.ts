@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import type { RuntimeTaskSessionSummary } from "../../src/core/api-contract";
-import { describeReviewRequest, isAwaitingAnswer } from "../../src/server/review-request-detail";
+import {
+	describeReviewRequest,
+	isAwaitingAnswer,
+	resolveReadyForReviewTitle,
+} from "../../src/server/review-request-detail";
 
 function activity(patch: Record<string, unknown> = {}) {
 	return {
@@ -90,9 +94,27 @@ describe("describeReviewRequest", () => {
 		expect(detail).not.toMatch(/\s…$/);
 	});
 
-	it("says nothing when the card said nothing", () => {
-		expect(describeReviewRequest(summary())).toBeUndefined();
-		expect(describeReviewRequest(summary({ latestHookActivity: activity({ finalMessage: "   " }) }))).toBeUndefined();
+	// Was `undefined`, and that is what hid the worst failure of this path: a card whose agent
+	// stopped having done nothing announced "Ready for review" with an empty body, which reads
+	// exactly like a finished card with a terse agent. Observed live -- no file, no transcript,
+	// no session, and nothing in the notification to tell the difference.
+	it("reports the silence of a card that recorded nothing", () => {
+		expect(describeReviewRequest(summary())).toBe("Stopped without reporting anything.");
+		// A finished agent whose last word was blank is the same silence.
+		expect(
+			describeReviewRequest(
+				summary({ latestHookActivity: activity({ finalMessage: "   ", hookEventName: "Stop" }) }),
+			),
+		).toBe("Stopped without reporting anything.");
+	});
+
+	it("names the exit code when the runtime reported one", () => {
+		expect(describeReviewRequest(summary({ exitCode: 1 }))).toBe("Stopped with exit 1 and reported nothing.");
+	});
+
+	// Exit zero is what a clean stop reports, so it adds nothing a reader can act on.
+	it("does not dress up a clean exit as a failure", () => {
+		expect(describeReviewRequest(summary({ exitCode: 0 }))).toBe("Stopped without reporting anything.");
 	});
 });
 
@@ -216,5 +238,17 @@ describe("a card that is neither asking nor finished", () => {
 				}),
 			),
 		).toBe("feito");
+	});
+});
+
+describe("resolveReadyForReviewTitle", () => {
+	it("says the card is waiting when it stopped to ask", () => {
+		expect(resolveReadyForReviewTitle(true)).toBe("Waiting on your answer");
+	});
+
+	// A card that finished is genuinely ready for review; only the asking case was wrong.
+	it("keeps the review headline for work that finished", () => {
+		expect(resolveReadyForReviewTitle(false)).toBe("Ready for review");
+		expect(resolveReadyForReviewTitle(undefined)).toBe("Ready for review");
 	});
 });

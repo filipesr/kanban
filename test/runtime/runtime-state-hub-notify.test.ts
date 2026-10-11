@@ -195,12 +195,14 @@ describe("what the review notice tells someone away from the board", () => {
 		expect(h.notifyReadyForReview.mock.calls[0]?.[0]?.detail).toBe("ExitPlanMode: Plano pronto, posso seguir?");
 	});
 
-	it("still notifies when the card said nothing", async () => {
+	// The notice still goes out, and now it says what there was to say: nothing. An empty body
+	// on a card that did no work reads exactly like a finished card with a terse agent.
+	it("still notifies when the card said nothing, and reports the silence", async () => {
 		const h = harness();
 		h.emit(summary({ state: "running" }));
 		h.emit(summary({ state: "awaiting_review", reviewReason: "exit", exitCode: 0 }));
 		await vi.waitFor(() => expect(h.notifyReadyForReview).toHaveBeenCalled());
-		expect(h.notifyReadyForReview.mock.calls[0]?.[0]?.detail).toBeUndefined();
+		expect(h.notifyReadyForReview.mock.calls[0]?.[0]?.detail).toBe("Stopped without reporting anything.");
 	});
 });
 
