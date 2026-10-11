@@ -688,6 +688,45 @@ async function unlinkTasks(input: { cwd: string; dependencyId: string; projectPa
 	};
 }
 
+/**
+ * Sends text into a running task's agent session -- the answer to a question the agent asked.
+ *
+ * This is the half that was missing from notifications: a card entering review could announce
+ * that it needed someone, and that someone had to come to the board to answer. With this, a
+ * connector that received the announcement can carry the answer back.
+ */
+async function sendTaskInput(input: {
+	cwd: string;
+	taskId: string;
+	text: string;
+	projectPath?: string;
+}): Promise<JsonRecord> {
+	const text = input.text.trim();
+	if (!text) {
+		throw new Error("task input requires --text with something in it.");
+	}
+	const workspaceRepoPath = await resolveWorkspaceRepoPath(input.projectPath, input.cwd);
+	const workspaceId = await ensureRuntimeWorkspace(workspaceRepoPath);
+	const runtimeClient = createRuntimeTrpcClient(workspaceId);
+	const runtimeState = await runtimeClient.workspace.getState.query();
+	const session = runtimeState.sessions[input.taskId] ?? null;
+	// Refused rather than queued: typing into a session that is not there would look like it
+	// worked, and the answer would be lost somewhere between the board and the agent.
+	if (!session || session.pid === null) {
+		throw new Error(`Task "${input.taskId}" has no running session in workspace ${workspaceRepoPath}.`);
+	}
+	const result = await runtimeClient.runtime.sendTaskSessionInput.mutate({
+		taskId: input.taskId,
+		text,
+		appendNewline: true,
+	});
+	return {
+		ok: result.ok,
+		taskId: input.taskId,
+		workspacePath: workspaceRepoPath,
+	};
+}
+
 async function startTask(input: { cwd: string; taskId: string; projectPath?: string }): Promise<JsonRecord> {
 	const workspaceRepoPath = await resolveWorkspaceRepoPath(input.projectPath, input.cwd);
 	const workspaceId = await ensureRuntimeWorkspace(workspaceRepoPath);
@@ -1362,6 +1401,24 @@ export function registerTaskCommand(program: Command): void {
 					await unlinkTasks({
 						cwd: process.cwd(),
 						dependencyId: options.dependencyId,
+						projectPath: options.projectPath,
+					}),
+			);
+		});
+
+	task
+		.command("input")
+		.description("Send text into a running task's agent session.")
+		.requiredOption("--task-id <id>", "Task ID.")
+		.requiredOption("--text <text>", "Text to send to the agent.")
+		.option("--project-path <path>", "Workspace path. Defaults to current directory workspace.")
+		.action(async (options: { taskId: string; text: string; projectPath?: string }) => {
+			await runTaskCommand(
+				async () =>
+					await sendTaskInput({
+						cwd: process.cwd(),
+						taskId: options.taskId,
+						text: options.text,
 						projectPath: options.projectPath,
 					}),
 			);
