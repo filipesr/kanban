@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { createTRPCProxyClient, httpBatchLink, TRPCClientError } from "@trpc/client";
 import type { Command } from "commander";
 import type { RuntimeHookEvent, RuntimeTaskHookActivity } from "../core/api-contract";
+import { summarizeAskUserQuestion } from "../core/ask-user-question-summary";
 import { buildKanbanCommandParts } from "../core/kanban-command";
 import { buildKanbanRuntimeUrl, getRuntimeFetch } from "../core/runtime-endpoint";
 import { buildWindowsCmdArgsArray, resolveWindowsComSpec, shouldUseWindowsCmdLaunch } from "../core/windows-cmd-launch";
@@ -165,9 +166,20 @@ function extractToolInput(payload: Record<string, unknown>): Record<string, unkn
 	return outputArgs;
 }
 
-function describeToolOperation(toolName: string | null, toolInput: Record<string, unknown> | null): string | null {
+export function describeToolOperation(
+	toolName: string | null,
+	toolInput: Record<string, unknown> | null,
+): string | null {
 	if (!toolName || !toolInput) {
 		return null;
+	}
+
+	// A question is the one tool operation whose input the person has to read to answer. The
+	// generic fallbacks below look for a command or a path and would reduce this to the bare
+	// tool name -- which is what it did, leaving "Using AskUserQuestion" as the whole notice.
+	const question = summarizeAskUserQuestion(toolInput);
+	if (question) {
+		return `${toolName}: ${question}`;
 	}
 
 	const command =
