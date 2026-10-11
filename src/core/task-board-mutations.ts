@@ -9,7 +9,12 @@ import type {
 	RuntimeTaskImage,
 	RuntimeTaskPriority,
 } from "./api-contract";
-import { normalizeTaskCategory, normalizeTaskPriority, normalizeTaskTags } from "./task-attributes";
+import {
+	normalizeTaskCategory,
+	normalizeTaskPriority,
+	normalizeTaskSource,
+	normalizeTaskTags,
+} from "./task-attributes";
 import { createUniqueTaskId } from "./task-id";
 import { resolveTaskTitle } from "./task-title";
 
@@ -27,6 +32,7 @@ export interface RuntimeCreateTaskInput {
 	tags?: string[];
 	category?: string;
 	priority?: RuntimeTaskPriority;
+	source?: string;
 	/**
 	 * Where the card lands in its column. Defaults to `"bottom"`: arrival order, which is what
 	 * someone creating several cards in sequence means by the order they typed them.
@@ -308,14 +314,17 @@ function buildTaskAttributes(input: {
 	tags?: string[];
 	category?: string;
 	priority?: RuntimeTaskPriority;
-}): Partial<Pick<RuntimeBoardCard, "tags" | "category" | "priority">> {
+	source?: string;
+}): Partial<Pick<RuntimeBoardCard, "tags" | "category" | "priority" | "source">> {
 	const tags = normalizeTaskTags(input.tags);
 	const category = normalizeTaskCategory(input.category);
 	const priority = normalizeTaskPriority(input.priority);
+	const source = normalizeTaskSource(input.source);
 	return {
 		...(tags ? { tags } : {}),
 		...(category ? { category } : {}),
 		...(priority ? { priority } : {}),
+		...(source ? { source } : {}),
 	};
 }
 

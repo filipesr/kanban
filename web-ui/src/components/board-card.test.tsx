@@ -223,6 +223,27 @@ describe("BoardCard", () => {
 		expect(text).toContain("high");
 	});
 
+	it("shows the origin and the date in the top row", async () => {
+		// Origin instead of an avatar: on a board one person works, who filed it says something
+		// and whose face it is does not.
+		await act(async () => {
+			root.render(
+				<BoardCard
+					card={createCard({
+						source: "telegram",
+						// Local midday: a UTC midnight lands on the previous day west of Greenwich.
+						createdAt: new Date("2026-08-26T12:00:00").getTime(),
+					})}
+					index={0}
+					columnId="backlog"
+				/>,
+			);
+		});
+
+		expect(container.textContent).toMatch(/26/);
+		expect(container.querySelector("svg")).toBeTruthy();
+	});
+
 	it("counts the tags it cannot fit instead of wrapping into a wall", async () => {
 		await act(async () => {
 			root.render(<BoardCard card={createCard({ tags: ["a", "b", "c", "d", "e"] })} index={0} columnId="backlog" />);
@@ -231,14 +252,23 @@ describe("BoardCard", () => {
 		expect(container.textContent).toContain("+2");
 	});
 
-	it("shows nothing extra for a card with no attributes", async () => {
-		// Every card written before these fields existed must look exactly as it did.
+	it("shows the date but no labels for a card with no attributes", async () => {
+		// The date is deliberate and belongs to every card. What a card without tags, category
+		// or priority must not grow is the labels -- those appear only when they say something.
 		await act(async () => {
-			root.render(<BoardCard card={createCard()} index={0} columnId="backlog" />);
+			root.render(
+				<BoardCard
+					card={createCard({ createdAt: new Date("2026-08-26T12:00:00").getTime() })}
+					index={0}
+					columnId="backlog"
+				/>,
+			);
 		});
 
-		expect(container.textContent).not.toContain("+");
-		expect(container.querySelector(".flex-wrap")).toBeNull();
+		const text = container.textContent ?? "";
+		expect(text).toMatch(/26/);
+		expect(text).not.toContain("+");
+		expect(text).not.toContain("high");
 	});
 
 	it("shows a loading state on the review done button while moving to done", async () => {

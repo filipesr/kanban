@@ -56,6 +56,7 @@ export interface BoardCard {
 	tags?: string[];
 	category?: string;
 	priority?: RuntimeTaskPriority;
+	source?: string;
 	createdAt: number;
 	updatedAt: number;
 }

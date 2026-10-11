@@ -153,6 +153,8 @@ export const runtimeBoardCardSchema = z
 		tags: z.array(z.string()).optional(),
 		category: z.string().optional(),
 		priority: runtimeTaskPrioritySchema.optional(),
+		/** Where the card came from: "telegram", "kanban", "cli", or another transport. */
+		source: z.string().optional(),
 		createdAt: z.number(),
 		updatedAt: z.number(),
 	})

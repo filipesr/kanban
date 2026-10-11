@@ -902,6 +902,7 @@ describe("fields the board does not display", () => {
 							tags: ["sonda", "infra"],
 							category: "bug",
 							priority: "high",
+							source: "telegram",
 							createdAt: 1,
 							updatedAt: 2,
 						},
@@ -914,6 +915,7 @@ describe("fields the board does not display", () => {
 		expect(card?.tags).toEqual(["sonda", "infra"]);
 		expect(card?.category).toBe("bug");
 		expect(card?.priority).toBe("high");
+		expect(card?.source).toBe("telegram");
 	});
 
 	it("drop a malformed value instead of carrying it", () => {

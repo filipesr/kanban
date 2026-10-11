@@ -2,7 +2,20 @@ import { Draggable } from "@hello-pangea/dnd";
 import { getRuntimeAgentCatalogEntry } from "@runtime-agent-catalog";
 import { formatClineToolCallLabel } from "@runtime-cline-tool-call-display";
 import { buildTaskWorktreeDisplayPath } from "@runtime-task-worktree-path";
-import { AlertCircle, AlertTriangle, Bot, GitBranch, Pencil, Play, RotateCcw, Tag, Trash2 } from "lucide-react";
+import {
+	AlertCircle,
+	AlertTriangle,
+	Bot,
+	GitBranch,
+	LayoutGrid,
+	MessageSquare,
+	Pencil,
+	Play,
+	RotateCcw,
+	Send,
+	Terminal,
+	Trash2,
+} from "lucide-react";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -19,7 +32,14 @@ import type { RuntimeTaskSessionSummary } from "@/runtime/types";
 import { useTaskWorkspaceSnapshotValue } from "@/stores/workspace-metadata-store";
 import type { BoardCard as BoardCardModel, BoardColumnId } from "@/types";
 import { getTaskAutoReviewCancelButtonLabel } from "@/types";
-import { hasCardAttributes, resolvePriorityTone, resolveVisibleTags } from "@/utils/card-attributes-display";
+import {
+	formatCardDate,
+	hasCardAttributes,
+	resolvePriorityTone,
+	resolveSourceKind,
+	resolveTagTone,
+	resolveVisibleTags,
+} from "@/utils/card-attributes-display";
 import { formatPathForDisplay } from "@/utils/path-display";
 import { useMeasure } from "@/utils/react-use";
 import {
@@ -48,6 +68,24 @@ const SESSION_ACTIVITY_COLOR = {
 const DESCRIPTION_COLLAPSE_LINES = 3;
 const DESCRIPTION_EXPANDED_MAX_LINES = 10;
 const DESCRIPTION_EXPAND_LABEL = "See more";
+
+/** One icon per origin the board knows. An unknown origin shows none rather than a wrong one. */
+const SOURCE_ICON: Record<"telegram" | "chat" | "cli" | "board", React.ReactElement> = {
+	telegram: <Send size={12} />,
+	chat: <MessageSquare size={12} />,
+	cli: <Terminal size={12} />,
+	board: <LayoutGrid size={12} />,
+};
+
+/** Tag colours, keyed by the tone its own name hashes to. */
+const TAG_TONE_CLASS: Record<ReturnType<typeof resolveTagTone>, string> = {
+	violet: "bg-violet-500/15 text-violet-400",
+	sky: "bg-sky-500/15 text-sky-400",
+	emerald: "bg-emerald-500/15 text-emerald-400",
+	amber: "bg-amber-500/15 text-amber-400",
+	rose: "bg-rose-500/15 text-rose-400",
+	cyan: "bg-cyan-500/15 text-cyan-400",
+};
 const DESCRIPTION_COLLAPSE_LABEL = "Less";
 const DESCRIPTION_COLLAPSE_SUFFIX = `… ${DESCRIPTION_EXPAND_LABEL}`;
 const DESCRIPTION_EXPANDED_SUFFIX = `… ${DESCRIPTION_COLLAPSE_LABEL}`;
@@ -286,6 +324,11 @@ export function BoardCard({
 	}
 	const sessionActivity = rawSessionActivity ?? lastSessionActivityRef.current;
 	const visibleTags = useMemo(() => resolveVisibleTags(card.tags), [card.tags]);
+	const sourceKind = resolveSourceKind(card.source);
+	const sourceIcon = sourceKind ? SOURCE_ICON[sourceKind] : null;
+	const cardDate = useMemo(() => formatCardDate(card.createdAt), [card.createdAt]);
+	// The row earns its space only when it has something to say.
+	const showTopRow = hasCardAttributes(card) || Boolean(sourceIcon) || Boolean(cardDate);
 	const displayTitle = useMemo(
 		() => normalizePromptForDisplay(card.title) || truncateTaskPromptLabel(card.prompt),
 		[card.prompt, card.title],
@@ -551,6 +594,55 @@ export function BoardCard({
 								isDependencyTarget && "kb-board-card-dependency-target",
 							)}
 						>
+							{showTopRow ? (
+								// Origin on the left, labels beside it, date pushed right: the row you
+								// scan a column by, above the title you read once you have stopped.
+								<div className="mb-1.5 flex items-center gap-1.5">
+									{sourceIcon ? (
+										<span className="shrink-0 text-text-tertiary" title={card.source}>
+											{sourceIcon}
+										</span>
+									) : null}
+									<div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+										{card.priority ? (
+											<span
+												className={cn(
+													"inline-flex items-center rounded px-1.5 py-0.5 font-medium text-[11px]",
+													isTrashCard || resolvePriorityTone(card.priority) !== "urgent"
+														? "bg-surface-3 text-text-tertiary"
+														: "bg-status-orange/15 text-status-orange",
+												)}
+											>
+												{card.priority}
+											</span>
+										) : null}
+										{card.category ? (
+											<span className="inline-flex max-w-full items-center rounded bg-surface-3 px-1.5 py-0.5 font-medium text-[11px] text-text-tertiary">
+												<span className="truncate">{card.category}</span>
+											</span>
+										) : null}
+										{visibleTags.shown.map((tag) => (
+											<span
+												key={tag}
+												className={cn(
+													"inline-flex max-w-full items-center rounded px-1.5 py-0.5 font-medium text-[11px]",
+													isTrashCard
+														? "bg-surface-3 text-text-tertiary"
+														: TAG_TONE_CLASS[resolveTagTone(tag)],
+												)}
+											>
+												<span className="truncate">{tag}</span>
+											</span>
+										))}
+										{visibleTags.overflow > 0 ? (
+											<span className="text-[11px] text-text-tertiary">+{visibleTags.overflow}</span>
+										) : null}
+									</div>
+									{cardDate ? (
+										<span className="shrink-0 text-[11px] text-text-tertiary">{cardDate}</span>
+									) : null}
+								</div>
+							) : null}
 							<div className="flex items-center gap-2" style={{ minHeight: 24 }}>
 								{statusMarker ? <div className="inline-flex items-center">{statusMarker}</div> : null}
 								<div className="flex-1 min-w-0">
@@ -725,39 +817,6 @@ export function BoardCard({
 										<Bot size={12} className="shrink-0" />
 										<span className="truncate">{taskAgentSettingsLabel}</span>
 									</span>
-								</div>
-							) : null}
-							{hasCardAttributes(card) ? (
-								<div className="mt-1 flex flex-wrap items-center gap-1">
-									{card.priority ? (
-										<span
-											className={cn(
-												"inline-flex items-center rounded-md border px-1.5 py-0.5 text-xs",
-												isTrashCard || resolvePriorityTone(card.priority) !== "urgent"
-													? "border-border bg-surface-1 text-text-tertiary"
-													: "border-status-orange/30 bg-status-orange/10 text-status-orange",
-											)}
-										>
-											{card.priority}
-										</span>
-									) : null}
-									{card.category ? (
-										<span className="inline-flex max-w-full items-center rounded-md border border-border bg-surface-1 px-1.5 py-0.5 text-text-tertiary text-xs">
-											<span className="truncate">{card.category}</span>
-										</span>
-									) : null}
-									{visibleTags.shown.map((tag) => (
-										<span
-											key={tag}
-											className="inline-flex max-w-full items-center rounded-md border border-border bg-surface-1 px-1.5 py-0.5 text-text-tertiary text-xs"
-										>
-											<Tag size={10} className="mr-1 shrink-0" />
-											<span className="truncate">{tag}</span>
-										</span>
-									))}
-									{visibleTags.overflow > 0 ? (
-										<span className="text-text-tertiary text-xs">+{visibleTags.overflow}</span>
-									) : null}
 								</div>
 							) : null}
 							{sessionActivity ? (

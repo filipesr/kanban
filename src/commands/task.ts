@@ -488,6 +488,7 @@ async function createTask(input: {
 	tags?: string[];
 	category?: string;
 	priority?: RuntimeTaskPriority;
+	source?: string;
 }): Promise<JsonRecord> {
 	const workspaceRepoPath = await resolveWorkspaceRepoPath(input.projectPath, input.cwd);
 	const workspaceId = await ensureRuntimeWorkspace(workspaceRepoPath);
@@ -512,6 +513,7 @@ async function createTask(input: {
 				tags: input.tags,
 				category: input.category,
 				priority: input.priority,
+				source: input.source,
 			},
 			() => globalThis.crypto.randomUUID(),
 		);
@@ -1185,6 +1187,7 @@ export function registerTaskCommand(program: Command): void {
 		.option("--tags <list>", "Comma-separated tags, e.g. infra,docs.")
 		.option("--category <text>", "Single category, e.g. bug | feature | infra.")
 		.option("--priority <level>", "Priority: high | medium | low.")
+		.option("--source <name>", "Where the task came from, e.g. telegram | kanban | cli.")
 		.option("--agent-id <id>", "Agent override: cline | claude | codex | droid | gemini | opencode | default.")
 		.option(
 			"--cline-provider <id>",
@@ -1214,6 +1217,7 @@ export function registerTaskCommand(program: Command): void {
 				tags?: string;
 				category?: string;
 				priority?: string;
+				source?: string;
 			}) => {
 				await runTaskCommand(
 					async () =>
@@ -1230,6 +1234,7 @@ export function registerTaskCommand(program: Command): void {
 							tags: parseTaskTagList(options.tags),
 							category: normalizeTaskCategory(options.category),
 							priority: parseTaskPriorityOption(options.priority) ?? undefined,
+							source: options.source,
 							clineSettings: buildTaskClineSettingsForCreate({
 								providerId: parseOptionalStringOrDefault(options.clineProvider) ?? undefined,
 								modelId: parseOptionalStringOrDefault(options.clineModel) ?? undefined,

@@ -82,3 +82,17 @@ export function parseTaskPriorityOption(input: string | undefined): TaskPriority
 	}
 	return priority;
 }
+
+const SOURCE_MAX_LENGTH = 24;
+
+/**
+ * Where the card came from: the chat transport that filed it, or the surface someone used.
+ *
+ * Deliberately not an enum. The connector serves several transports and gains more over time,
+ * and a card from an unknown one should say so rather than fail to load -- a board that refuses
+ * to open because of a label is worse than a label nobody recognizes.
+ */
+export function normalizeTaskSource(input: string | undefined): string | undefined {
+	const trimmed = input?.trim().slice(0, SOURCE_MAX_LENGTH).trim().toLocaleLowerCase();
+	return trimmed ? trimmed : undefined;
+}

@@ -152,17 +152,20 @@ function normalizeCardAttributes(card: {
 	tags?: unknown;
 	category?: unknown;
 	priority?: unknown;
-}): Partial<Pick<BoardCard, "tags" | "category" | "priority">> {
+	source?: unknown;
+}): Partial<Pick<BoardCard, "tags" | "category" | "priority" | "source">> {
 	const tags = Array.isArray(card.tags)
 		? card.tags.filter((tag): tag is string => typeof tag === "string" && tag.trim().length > 0)
 		: [];
 	const category = typeof card.category === "string" ? card.category.trim() : "";
 	const priority =
 		card.priority === "high" || card.priority === "medium" || card.priority === "low" ? card.priority : undefined;
+	const source = typeof card.source === "string" ? card.source.trim() : "";
 	return {
 		...(tags.length > 0 ? { tags } : {}),
 		...(category ? { category } : {}),
 		...(priority ? { priority } : {}),
+		...(source ? { source } : {}),
 	};
 }
 
@@ -188,6 +191,7 @@ function normalizeCard(rawCard: unknown): BoardCard | null {
 		tags?: unknown;
 		category?: unknown;
 		priority?: unknown;
+		source?: unknown;
 		createdAt?: unknown;
 		updatedAt?: unknown;
 	};
