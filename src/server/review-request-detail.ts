@@ -10,12 +10,7 @@ import type { RuntimeTaskSessionSummary } from "../core/api-contract";
 
 const DETAIL_MAX_LENGTH = 600;
 
-/**
- * Hook events that mean the prompt is over. `notificationType` cannot be used for this: it
- * sticks at `permission_prompt` long after the prompt was answered, while the hook event moves
- * on. Measured on a card whose activity already read "Final: descartado" and whose
- * notificationType still claimed a pending prompt.
- */
+/** Hook events that mean the turn is over, whatever the agent did or did not say. */
 const COMPLETION_EVENTS = new Set(["posttooluse", "posttoolusefailure", "subagentstop", "stop"]);
 
 /**
@@ -26,7 +21,15 @@ const COMPLETION_EVENTS = new Set(["posttooluse", "posttoolusefailure", "subagen
  */
 export function isAwaitingAnswer(summary: RuntimeTaskSessionSummary): boolean {
 	const activity = summary.latestHookActivity;
-	if (!activity || activity.notificationType !== "permission_prompt") {
+	if (!activity) {
+		return false;
+	}
+	// The agent having said its final word is the one reliable sign it is not waiting. Measured
+	// across a dozen cards: every one still waiting had `finalMessage: null`, and every one
+	// that had answered carried the text it ended with. `notificationType` says neither -- it
+	// was `null` on the prompt that arrived through PreToolUse and still `permission_prompt`
+	// long after the answer.
+	if (activity.finalMessage?.trim()) {
 		return false;
 	}
 	const event = activity.hookEventName?.trim().toLocaleLowerCase() ?? "";

@@ -52,8 +52,9 @@ describe("describeReviewRequest", () => {
 			summary({
 				latestHookActivity: activity({
 					notificationType: "permission_prompt",
+					hookEventName: "Notification",
 					toolName: "ExitPlanMode",
-					finalMessage: "Plano pronto, posso seguir?",
+					activityText: "Plano pronto, posso seguir?",
 				}),
 			}),
 		);
@@ -127,11 +128,43 @@ describe("isAwaitingAnswer", () => {
 		}
 	});
 
-	it("is false for anything that is not a prompt at all", () => {
+	it("is false once the agent has said its final word", () => {
+		// Measured across a dozen cards: every one still waiting had no final message, and
+		// every one that had answered carried the text it ended with. That is the only field
+		// tracking reality -- notificationType was null on a prompt that arrived through
+		// PreToolUse and still "permission_prompt" long after the answer.
+		expect(
+			isAwaitingAnswer(
+				summary({
+					latestHookActivity: activity({
+						notificationType: "permission_prompt",
+						hookEventName: "Notification",
+						activityText: "Final: descartado",
+						finalMessage: "descartado",
+					}),
+				}),
+			),
+		).toBe(false);
+	});
+
+	it("is true for a prompt that arrived with no notification type at all", () => {
+		// The question asked through PreToolUse carries none, and requiring one was why no
+		// question was ever marked as waiting.
+		expect(
+			isAwaitingAnswer(
+				summary({
+					latestHookActivity: activity({
+						hookEventName: "PreToolUse",
+						toolName: "AskUserQuestion",
+						activityText: "Using AskUserQuestion: Devo gravar? — 1) Sim 2) Não",
+					}),
+				}),
+			),
+		).toBe(true);
+	});
+
+	it("is false when there is no activity to judge", () => {
 		expect(isAwaitingAnswer(summary())).toBe(false);
-		expect(isAwaitingAnswer(summary({ latestHookActivity: activity({ notificationType: "idle_prompt" }) }))).toBe(
-			false,
-		);
 	});
 });
 

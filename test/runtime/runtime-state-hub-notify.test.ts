@@ -181,10 +181,10 @@ describe("what the review notice tells someone away from the board", () => {
 				state: "awaiting_review",
 				reviewReason: "hook",
 				latestHookActivity: {
-					activityText: null,
+					activityText: "Plano pronto, posso seguir?",
 					toolName: "ExitPlanMode",
 					toolInputSummary: null,
-					finalMessage: "Plano pronto, posso seguir?",
+					finalMessage: null,
 					hookEventName: "Notification",
 					notificationType: "permission_prompt",
 					source: "claude",
