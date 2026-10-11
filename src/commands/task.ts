@@ -339,7 +339,15 @@ function findTaskRecord(
 	return null;
 }
 
-function formatTaskRecord(
+/**
+ * One card as the CLI prints it.
+ *
+ * Every field a `task create` accepts has to come back out of `task list`, or the CLI cannot be
+ * used to check its own work: an agent that sets `--tags` and then reads the board back finds no
+ * tags and concludes the write was dropped. Optional fields stay absent rather than null, so a
+ * card that never had a category does not print one.
+ */
+export function formatTaskRecord(
 	state: RuntimeWorkspaceStateResponse,
 	task: RuntimeBoardCard,
 	columnId: RuntimeBoardColumnId,
@@ -347,12 +355,17 @@ function formatTaskRecord(
 	const session = state.sessions[task.id] ?? null;
 	return {
 		id: task.id,
+		...(task.title ? { title: task.title } : {}),
 		prompt: task.prompt,
 		column: columnId,
 		baseRef: task.baseRef,
 		startInPlanMode: task.startInPlanMode,
 		autoReviewEnabled: task.autoReviewEnabled === true,
 		autoReviewMode: task.autoReviewMode ?? "commit",
+		...(task.tags && task.tags.length > 0 ? { tags: task.tags } : {}),
+		...(task.category ? { category: task.category } : {}),
+		...(task.priority ? { priority: task.priority } : {}),
+		...(task.source ? { source: task.source } : {}),
 		...(task.agentId ? { agentId: task.agentId } : {}),
 		...formatTaskClineSettings(task.clineSettings),
 		createdAt: task.createdAt,
@@ -729,7 +742,38 @@ async function sendTaskInput(input: {
 	};
 }
 
-async function startTask(input: { cwd: string; taskId: string; projectPath?: string }): Promise<JsonRecord> {
+/**
+ * Which agent starts this session: the flag if one was given, otherwise the card's own.
+ *
+ * Three states, and the difference between the last two is the whole point: no flag means
+ * "whatever the card says", `--agent-id default` means "ignore the card, use the board
+ * default", and a named agent means that one. Collapsing the first two would make the flag
+ * impossible to leave out.
+ */
+export function resolveStartAgentId(
+	override: RuntimeAgentId | null | undefined,
+	cardAgentId: RuntimeAgentId | undefined,
+): RuntimeAgentId | undefined {
+	if (override === undefined) {
+		return cardAgentId;
+	}
+	return override ?? undefined;
+}
+
+async function startTask(input: {
+	cwd: string;
+	taskId: string;
+	projectPath?: string;
+	/**
+	 * Agent for this session, overriding whatever the card was created with.
+	 *
+	 * Without it, a card can only be started with the agent chosen when it was filed -- and the
+	 * agents differ in what they can do: only some can stop and ask the person a question. A
+	 * card filed by a transport that does not pick an agent was stuck with the board default
+	 * and could never ask for anything.
+	 */
+	agentId?: RuntimeAgentId | null;
+}): Promise<JsonRecord> {
 	const workspaceRepoPath = await resolveWorkspaceRepoPath(input.projectPath, input.cwd);
 	const workspaceId = await ensureRuntimeWorkspace(workspaceRepoPath);
 	const runtimeClient = createRuntimeTrpcClient(workspaceId);
@@ -769,7 +813,7 @@ async function startTask(input: { cwd: string; taskId: string; projectPath?: str
 			taskTitle: task.title,
 			startInPlanMode: task.startInPlanMode,
 			baseRef: task.baseRef,
-			agentId: task.agentId,
+			agentId: resolveStartAgentId(input.agentId, task.agentId),
 			clineSettings: task.clineSettings,
 		});
 		if (!started.ok || !started.summary) {
@@ -1434,13 +1478,18 @@ export function registerTaskCommand(program: Command): void {
 		.description("Start a task session and move task to in_progress.")
 		.requiredOption("--task-id <id>", "Task ID.")
 		.option("--project-path <path>", "Workspace path. Defaults to current directory workspace.")
-		.action(async (options: { taskId: string; projectPath?: string }) => {
+		.option(
+			"--agent-id <id>",
+			"Agent override for this session: cline | claude | codex | droid | gemini | opencode | default.",
+		)
+		.action(async (options: { taskId: string; projectPath?: string; agentId?: string }) => {
 			await runTaskCommand(
 				async () =>
 					await startTask({
 						cwd: process.cwd(),
 						taskId: options.taskId,
 						projectPath: options.projectPath,
+						agentId: parseAgentId(options.agentId),
 					}),
 			);
 		});
