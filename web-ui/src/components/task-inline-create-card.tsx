@@ -5,12 +5,14 @@ import { type Dispatch, type ReactElement, type SetStateAction, useCallback, use
 import { useHotkeys } from "react-hotkeys-hook";
 
 import { BranchSelectDropdown, type BranchSelectOption } from "@/components/branch-select-dropdown";
+import { CardAttributesFields } from "@/components/card-attributes-fields";
 import { TaskAgentModelPicker, useTaskAgentModelPicker } from "@/components/task-agent-model-picker";
 import { TaskPromptComposer } from "@/components/task-prompt-composer";
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
 import type { RuntimeAgentId, RuntimeClineReasoningEffort, RuntimeTaskClineSettings } from "@/runtime/types";
 import type { TaskAutoReviewMode, TaskImage } from "@/types";
+import type { CardAttributesDraft } from "@/utils/card-attributes-draft";
 import { pasteShortcutLabel } from "@/utils/platform";
 import { useDocumentEvent, useMeasure } from "@/utils/react-use";
 
@@ -58,6 +60,8 @@ export function TaskInlineCreateCard({
 	autoReviewEnabled,
 	onAutoReviewEnabledChange,
 	autoReviewMode,
+	attributes,
+	onAttributesChange,
 	onAutoReviewModeChange,
 	startInPlanModeDisabled = false,
 	workspaceId,
@@ -90,6 +94,8 @@ export function TaskInlineCreateCard({
 	autoReviewEnabled: boolean;
 	onAutoReviewEnabledChange: (value: boolean) => void;
 	autoReviewMode: TaskAutoReviewMode;
+	attributes?: CardAttributesDraft;
+	onAttributesChange?: (value: CardAttributesDraft) => void;
 	onAutoReviewModeChange: (value: TaskAutoReviewMode) => void;
 	startInPlanModeDisabled?: boolean;
 	workspaceId: string | null;
@@ -308,6 +314,9 @@ export function TaskInlineCreateCard({
 						))}
 					</NativeSelect>
 				</div>
+				{attributes && onAttributesChange ? (
+					<CardAttributesFields draft={attributes} onChange={onAttributesChange} />
+				) : null}
 				{onAgentIdChange && onClineSettingsChange ? (
 					<TaskAgentModelPicker
 						agentId={agentId}

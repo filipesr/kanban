@@ -21,6 +21,7 @@ import { useHotkeys } from "react-hotkeys-hook";
 
 import type { BranchSelectOption } from "@/components/branch-select-dropdown";
 import { BranchSelectDropdown } from "@/components/branch-select-dropdown";
+import { CardAttributesFields } from "@/components/card-attributes-fields";
 import { TaskAgentModelPicker, useTaskAgentModelPicker } from "@/components/task-agent-model-picker";
 import { TaskPromptComposer } from "@/components/task-prompt-composer";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import type { RuntimeAgentId, RuntimeClineReasoningEffort, RuntimeTaskClineSettings } from "@/runtime/types";
 import { LocalStorageKey } from "@/storage/local-storage-store";
 import type { TaskAutoReviewMode, TaskImage } from "@/types";
+import type { CardAttributesDraft } from "@/utils/card-attributes-draft";
 import { isMacPlatform, pasteShortcutLabel } from "@/utils/platform";
 import { useRawLocalStorageValue } from "@/utils/react-use";
 
@@ -113,6 +115,8 @@ export function TaskCreateDialog({
 	onAutoReviewEnabledChange,
 	autoReviewMode,
 	onAutoReviewModeChange,
+	attributes,
+	onAttributesChange,
 	startInPlanModeDisabled = false,
 	workspaceId,
 	branchRef,
@@ -144,6 +148,8 @@ export function TaskCreateDialog({
 	onAutoReviewEnabledChange: (value: boolean) => void;
 	autoReviewMode: TaskAutoReviewMode;
 	onAutoReviewModeChange: (value: TaskAutoReviewMode) => void;
+	attributes: CardAttributesDraft;
+	onAttributesChange: (value: CardAttributesDraft) => void;
 	startInPlanModeDisabled?: boolean;
 	workspaceId: string | null;
 	branchRef: string;
@@ -575,6 +581,8 @@ export function TaskCreateDialog({
 							))}
 						</NativeSelect>
 					</div>
+
+					<CardAttributesFields draft={attributes} onChange={onAttributesChange} />
 
 					{onAgentIdChange && onClineSettingsChange ? (
 						<TaskAgentModelPicker

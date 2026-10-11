@@ -13,6 +13,12 @@ import { addTaskToColumnWithResult, findCardSelection, updateTask, updateTaskTit
 import { toTelemetrySelectedAgentId, trackTaskCreated } from "@/telemetry/events";
 import type { BoardCard, BoardData, TaskAutoReviewMode, TaskImage } from "@/types";
 import { resolveTaskAutoReviewMode } from "@/types";
+import {
+	type CardAttributesDraft,
+	EMPTY_CARD_ATTRIBUTES,
+	fromCardAttributesDraft,
+	toCardAttributesDraft,
+} from "@/utils/card-attributes-draft";
 import { useBooleanLocalStorageValue, useRawLocalStorageValue } from "@/utils/react-use";
 
 interface UseTaskEditorInput {
@@ -53,6 +59,8 @@ export interface UseTaskEditorResult {
 	setNewTaskAgentId: Dispatch<SetStateAction<RuntimeAgentId | undefined>>;
 	newTaskClineSettings: RuntimeTaskClineSettings | undefined;
 	setNewTaskClineSettings: Dispatch<SetStateAction<RuntimeTaskClineSettings | undefined>>;
+	newTaskAttributes: CardAttributesDraft;
+	setNewTaskAttributes: Dispatch<SetStateAction<CardAttributesDraft>>;
 	editingTaskId: string | null;
 	editTaskPrompt: string;
 	setEditTaskPrompt: Dispatch<SetStateAction<string>>;
@@ -71,6 +79,8 @@ export interface UseTaskEditorResult {
 	setEditTaskAgentId: Dispatch<SetStateAction<RuntimeAgentId | undefined>>;
 	editTaskClineSettings: RuntimeTaskClineSettings | undefined;
 	setEditTaskClineSettings: Dispatch<SetStateAction<RuntimeTaskClineSettings | undefined>>;
+	editTaskAttributes: CardAttributesDraft;
+	setEditTaskAttributes: Dispatch<SetStateAction<CardAttributesDraft>>;
 	handleOpenCreateTask: () => void;
 	handleCancelCreateTask: () => void;
 	handleOpenEditTask: (task: BoardCard, options?: OpenEditTaskOptions) => void;
@@ -121,6 +131,8 @@ export function useTaskEditor({
 	const isEditTaskStartInPlanModeDisabled = false;
 	const [editTaskBranchRef, setEditTaskBranchRef] = useState("");
 
+	const [newTaskAttributes, setNewTaskAttributes] = useState<CardAttributesDraft>(EMPTY_CARD_ATTRIBUTES);
+	const [editTaskAttributes, setEditTaskAttributes] = useState<CardAttributesDraft>(EMPTY_CARD_ATTRIBUTES);
 	const [newTaskAgentId, setNewTaskAgentId] = useState<RuntimeAgentId | undefined>(undefined);
 	const [newTaskClineSettings, setNewTaskClineSettings] = useState<RuntimeTaskClineSettings | undefined>(undefined);
 	const [editTaskAgentId, setEditTaskAgentId] = useState<RuntimeAgentId | undefined>(undefined);
@@ -242,6 +254,7 @@ export function useTaskEditor({
 			const fallbackBranch = task.baseRef || resolvedDefaultTaskBranchRef;
 			setEditTaskBranchRef(fallbackBranch);
 			setEditTaskAgentId(task.agentId);
+			setEditTaskAttributes(toCardAttributesDraft(task));
 			setEditTaskClineSettings(task.clineSettings);
 		},
 		[resolvedDefaultTaskBranchRef, setSelectedTaskId],
@@ -284,6 +297,7 @@ export function useTaskEditor({
 				autoReviewMode: editTaskAutoReviewMode,
 				images: editTaskImages,
 				agentId: editTaskAgentId,
+				...fromCardAttributesDraft(editTaskAttributes),
 				clineSettings: editTaskClineSettings,
 				baseRef,
 			});
@@ -298,6 +312,7 @@ export function useTaskEditor({
 		setEditTaskImages([]);
 		setEditTaskBranchRef("");
 		setEditTaskAgentId(undefined);
+		setEditTaskAttributes(EMPTY_CARD_ATTRIBUTES);
 		setEditTaskClineSettings(undefined);
 		return savedTaskId;
 	}, [
@@ -351,6 +366,7 @@ export function useTaskEditor({
 				autoReviewMode: newTaskAutoReviewMode,
 				images: newTaskImages,
 				agentId: newTaskAgentId,
+				...fromCardAttributesDraft(newTaskAttributes),
 				clineSettings: newTaskClineSettings,
 				baseRef,
 			});
@@ -417,6 +433,8 @@ export function useTaskEditor({
 					autoReviewMode: newTaskAutoReviewMode,
 					images: newTaskImages,
 					agentId: newTaskAgentId,
+					...fromCardAttributesDraft(newTaskAttributes),
+					...fromCardAttributesDraft(newTaskAttributes),
 					clineSettings: newTaskClineSettings,
 					baseRef,
 				});
@@ -480,9 +498,11 @@ export function useTaskEditor({
 		setEditTaskImages([]);
 		setEditTaskBranchRef("");
 		setEditTaskAgentId(undefined);
+		setEditTaskAttributes(EMPTY_CARD_ATTRIBUTES);
 		setEditTaskClineSettings(undefined);
 		setNewTaskImages([]);
 		setNewTaskAgentId(undefined);
+		setNewTaskAttributes(EMPTY_CARD_ATTRIBUTES);
 		setNewTaskClineSettings(undefined);
 	}, []);
 
@@ -501,6 +521,10 @@ export function useTaskEditor({
 		isNewTaskStartInPlanModeDisabled,
 		newTaskBranchRef,
 		setNewTaskBranchRef,
+		newTaskAttributes,
+		setNewTaskAttributes,
+		editTaskAttributes,
+		setEditTaskAttributes,
 		newTaskAgentId,
 		setNewTaskAgentId,
 		newTaskClineSettings,
