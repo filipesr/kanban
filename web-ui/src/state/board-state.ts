@@ -143,6 +143,29 @@ function normalizeTaskClineSettings(input: {
 	};
 }
 
+/**
+ * The attribute fields, kept only if they are the shape the board expects. A malformed value
+ * from a hand-edited file is dropped rather than carried, but a well-formed one survives the
+ * round trip even though nothing here renders it.
+ */
+function normalizeCardAttributes(card: {
+	tags?: unknown;
+	category?: unknown;
+	priority?: unknown;
+}): Partial<Pick<BoardCard, "tags" | "category" | "priority">> {
+	const tags = Array.isArray(card.tags)
+		? card.tags.filter((tag): tag is string => typeof tag === "string" && tag.trim().length > 0)
+		: [];
+	const category = typeof card.category === "string" ? card.category.trim() : "";
+	const priority =
+		card.priority === "high" || card.priority === "medium" || card.priority === "low" ? card.priority : undefined;
+	return {
+		...(tags.length > 0 ? { tags } : {}),
+		...(category ? { category } : {}),
+		...(priority ? { priority } : {}),
+	};
+}
+
 function normalizeCard(rawCard: unknown): BoardCard | null {
 	if (!rawCard || typeof rawCard !== "object") {
 		return null;
@@ -162,6 +185,9 @@ function normalizeCard(rawCard: unknown): BoardCard | null {
 		clineProviderId?: unknown;
 		clineModelId?: unknown;
 		clineReasoningEffort?: unknown;
+		tags?: unknown;
+		category?: unknown;
+		priority?: unknown;
 		createdAt?: unknown;
 		updatedAt?: unknown;
 	};
@@ -199,6 +225,10 @@ function normalizeCard(rawCard: unknown): BoardCard | null {
 		baseRef,
 		...(typeof card.agentId === "string" && card.agentId ? { agentId: card.agentId as RuntimeAgentId } : {}),
 		...(clineSettings !== undefined ? { clineSettings } : {}),
+		// Carried through without being displayed. This function rebuilds every card field by
+		// field, so anything it does not copy is destroyed on the next save -- which is how
+		// tags and priority set from the CLI disappeared minutes after being set.
+		...normalizeCardAttributes(card),
 		createdAt: typeof card.createdAt === "number" ? card.createdAt : now,
 		updatedAt: typeof card.updatedAt === "number" ? card.updatedAt : now,
 	};

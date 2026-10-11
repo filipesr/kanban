@@ -4,6 +4,7 @@ import type {
 	RuntimeTaskAutoReviewMode,
 	RuntimeTaskClineSettings,
 	RuntimeTaskImage,
+	RuntimeTaskPriority,
 } from "@/runtime/types";
 
 export type BoardColumnId = RuntimeBoardColumnId;
@@ -47,6 +48,14 @@ export interface BoardCard {
 	agentId?: RuntimeAgentId;
 	clineSettings?: RuntimeTaskClineSettings;
 	baseRef: string;
+	/**
+	 * Carried through but not displayed yet. The board rebuilds every card field by field when
+	 * it normalizes, so a field missing from here is silently destroyed on the next save --
+	 * which is exactly what happened to tags and priority set from the CLI.
+	 */
+	tags?: string[];
+	category?: string;
+	priority?: RuntimeTaskPriority;
 	createdAt: number;
 	updatedAt: number;
 }

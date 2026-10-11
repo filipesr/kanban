@@ -883,3 +883,62 @@ describe("new cards in the board UI", () => {
 		expect(backlog?.cards.map((card) => card.prompt)).toEqual(["newer", "older"]);
 	});
 });
+
+describe("fields the board does not display", () => {
+	it("survive a normalize round trip", () => {
+		// normalizeCard rebuilds every card field by field, so anything it does not copy is
+		// destroyed on the next save. Tags and priority set from the CLI vanished exactly that
+		// way, minutes after being set, with nobody touching them.
+		const board = normalizeBoardData({
+			columns: [
+				{
+					id: "backlog",
+					cards: [
+						{
+							id: "9cc40",
+							title: "sonda",
+							prompt: "corpo",
+							baseRef: "main",
+							tags: ["sonda", "infra"],
+							category: "bug",
+							priority: "high",
+							createdAt: 1,
+							updatedAt: 2,
+						},
+					],
+				},
+			],
+			dependencies: [],
+		});
+		const card = board?.columns.find((column) => column.id === "backlog")?.cards[0];
+		expect(card?.tags).toEqual(["sonda", "infra"]);
+		expect(card?.category).toBe("bug");
+		expect(card?.priority).toBe("high");
+	});
+
+	it("drop a malformed value instead of carrying it", () => {
+		const board = normalizeBoardData({
+			columns: [
+				{
+					id: "backlog",
+					cards: [
+						{
+							id: "x",
+							title: "t",
+							prompt: "p",
+							baseRef: "main",
+							tags: "nao e lista",
+							priority: "urgente",
+							createdAt: 1,
+							updatedAt: 2,
+						},
+					],
+				},
+			],
+			dependencies: [],
+		});
+		const card = board?.columns.find((column) => column.id === "backlog")?.cards[0];
+		expect(card?.tags).toBeUndefined();
+		expect(card?.priority).toBeUndefined();
+	});
+});
