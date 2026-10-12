@@ -32,6 +32,8 @@ export interface ClineHubNotifyClient {
 		source?: { workspacePath?: string; itemId?: string };
 		/** Column the card sits in, so a subscriber can keep one message per card current. */
 		column?: string;
+		/** Update what is already shown, or do nothing. Never start a new conversation. */
+		updateOnly?: boolean;
 		supersedesPrevious?: boolean;
 		awaitingAnswer?: boolean;
 	}): Promise<void>;
@@ -119,6 +121,7 @@ function defaultCreateClient(record: Required<ClineHubDiscoveryRecord>): ClineHu
 
 export interface ClineHubNotifier {
 	notifyReadyForReview(notification: ReadyForReviewNotification): Promise<void>;
+	notifyCardMoved(notification: ReadyForReviewNotification): Promise<void>;
 	notifyCardProgress(notification: CardProgressNotification): Promise<void>;
 }
 
@@ -139,6 +142,7 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): C
 		supersedesPrevious?: boolean;
 		awaitingAnswer?: boolean;
 		column?: string;
+		updateOnly?: boolean;
 	}): Promise<void> => {
 		let client: ClineHubNotifyClient | undefined;
 		try {
@@ -165,6 +169,7 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): C
 				...(payload.supersedesPrevious ? { supersedesPrevious: true } : {}),
 				...(payload.awaitingAnswer ? { awaitingAnswer: true } : {}),
 				...(payload.column ? { column: payload.column } : {}),
+				...(payload.updateOnly ? { updateOnly: true } : {}),
 			});
 		} catch {
 			// Deliberately silent: a notification that fails must never surface as a board
@@ -201,6 +206,21 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): C
 				column: notification.column,
 				// Never supersedes: this one asks the person for something, so it has to arrive
 				// on its own instead of quietly replacing a status line.
+			});
+		},
+		notifyCardMoved(notification: ReadyForReviewNotification): Promise<void> {
+			return publish({
+				title: notification.taskTitle,
+				body: notification.workspaceName,
+				taskId: notification.taskId,
+				workspacePath: notification.workspacePath,
+				supersedesPrevious: true,
+				column: notification.column,
+				// A card dragged across the board is a change of state, not an announcement.
+				// Someone watching that card already has it on screen and wants the dot to
+				// follow; someone who never asked about it should not be handed a message
+				// because a board was tidied.
+				updateOnly: true,
 			});
 		},
 		notifyCardProgress(notification: CardProgressNotification): Promise<void> {

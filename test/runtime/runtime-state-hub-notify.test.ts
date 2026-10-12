@@ -56,8 +56,17 @@ function harness() {
 		}) => Promise<void>
 	>(async () => undefined);
 	let emit: (summary: RuntimeTaskSessionSummary) => void = () => undefined;
+	const notifyCardMoved = vi.fn<
+		(notification: {
+			taskId: string;
+			taskTitle: string;
+			workspaceName: string;
+			workspacePath?: string;
+			column?: string;
+		}) => Promise<void>
+	>(async () => undefined);
 	const hub = createRuntimeStateHub({
-		hubNotifier: { notifyReadyForReview, notifyCardProgress },
+		hubNotifier: { notifyReadyForReview, notifyCardProgress, notifyCardMoved },
 		workspaceRegistry: {
 			getWorkspacePathById: () => REPO,
 			buildWorkspaceStateSnapshot: async () => ({
@@ -85,6 +94,7 @@ function harness() {
 	return {
 		notifyReadyForReview,
 		notifyCardProgress,
+		notifyCardMoved,
 		emit: (s: RuntimeTaskSessionSummary) => emit(s),
 	};
 }

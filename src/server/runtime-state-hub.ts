@@ -67,6 +67,8 @@ export interface RuntimeStateHub {
 	broadcastClineMcpAuthStatusesUpdated: (statuses: RuntimeClineMcpServerAuthStatus[]) => void;
 	bumpClineSessionContextVersion: () => void;
 	broadcastTaskReadyForReview: (workspaceId: string, taskId: string) => void;
+	/** Tell subscribers a card changed column, so anything showing it can follow. */
+	notifyHubCardMoved: (workspaceId: string, workspacePath: string | null, taskId: string) => Promise<void>;
 	close: () => Promise<void>;
 }
 
@@ -414,6 +416,25 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 		}
 	};
 
+	const notifyHubCardMoved = async (
+		workspaceId: string,
+		workspacePath: string | null,
+		taskId: string,
+	): Promise<void> => {
+		try {
+			const { taskTitle, workspaceName, column } = await resolveCardIdentity(workspaceId, workspacePath, taskId);
+			await hubNotifier.notifyCardMoved({
+				taskId,
+				taskTitle,
+				workspaceName,
+				workspacePath: workspacePath ?? undefined,
+				column,
+			});
+		} catch {
+			// Notification is an accessory and must never surface as a board error.
+		}
+	};
+
 	const notifyHubCardProgress = async (
 		workspaceId: string,
 		workspacePath: string | null,
@@ -730,6 +751,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 		broadcastClineMcpAuthStatusesUpdated,
 		bumpClineSessionContextVersion,
 		broadcastTaskReadyForReview,
+		notifyHubCardMoved,
 		close: async () => {
 			for (const timer of taskSessionBroadcastTimersByWorkspaceId.values()) {
 				clearTimeout(timer);

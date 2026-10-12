@@ -16,6 +16,7 @@ import {
 	parseWorktreeDeleteRequest,
 	parseWorktreeEnsureRequest,
 } from "../core/api-validation";
+import { diffCardColumns } from "../core/card-column-moves";
 import { saveWorkspaceState, WorkspaceStateConflictError } from "../state/workspace-state";
 import type { TerminalSessionManager } from "../terminal/session-manager";
 import {
@@ -42,6 +43,8 @@ export interface CreateWorkspaceApiDependencies {
 		workspacePath: string;
 	}) => Promise<ClineTaskSessionService>;
 	broadcastRuntimeWorkspaceStateUpdated: (workspaceId: string, workspacePath: string) => Promise<void> | void;
+	/** Tell subscribers a card changed column, for anything showing that card elsewhere. */
+	notifyHubCardMoved?: (workspaceId: string, workspacePath: string | null, taskId: string) => Promise<void>;
 	broadcastRuntimeProjectsUpdated: (preferredCurrentProjectId: string | null) => Promise<void> | void;
 	buildWorkspaceStateSnapshot: (workspaceId: string, workspacePath: string) => Promise<RuntimeWorkspaceStateResponse>;
 }
@@ -369,7 +372,20 @@ export function createWorkspaceApi(deps: CreateWorkspaceApiDependencies): Runtim
 				for (const summary of terminalManager.listSummaries()) {
 					input.sessions[summary.taskId] = summary;
 				}
+				// Read before writing: the board is saved whole, and nothing in the saved state
+				// says what changed. A card dragged across the board announces itself nowhere
+				// else, so anything showing that card -- a chat message keeping one line per
+				// card -- would go stale the moment someone tidied the board by hand.
+				const previousBoard = deps.notifyHubCardMoved
+					? await deps
+							.buildWorkspaceStateSnapshot(workspaceScope.workspaceId, workspaceScope.workspacePath)
+							.then((snapshot) => snapshot.board)
+							.catch(() => undefined)
+					: undefined;
 				const response = await saveWorkspaceState(workspaceScope.workspacePath, input);
+				for (const move of diffCardColumns(previousBoard, input.board)) {
+					void deps.notifyHubCardMoved?.(workspaceScope.workspaceId, workspaceScope.workspacePath, move.taskId);
+				}
 				void deps.broadcastRuntimeWorkspaceStateUpdated(workspaceScope.workspaceId, workspaceScope.workspacePath);
 				void deps.broadcastRuntimeProjectsUpdated(workspaceScope.workspaceId);
 				return response;
