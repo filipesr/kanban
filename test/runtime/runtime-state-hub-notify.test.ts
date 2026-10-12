@@ -43,6 +43,7 @@ function harness() {
 			detail?: string;
 			priority?: string;
 			awaitingAnswer?: boolean;
+			column?: string;
 		}) => Promise<void>
 	>(async () => undefined);
 	const notifyCardProgress = vi.fn<
@@ -258,5 +259,18 @@ describe("what the hub actually hands the notifier", () => {
 		const sent = h.notifyReadyForReview.mock.calls[0]?.[0];
 		expect(sent?.awaitingAnswer).toBe(false);
 		expect(sent?.detail).toBe("descartado");
+	});
+});
+
+describe("the column travels with the notice", () => {
+	// A subscriber showing one message per card keeps it current from this: without the column
+	// the only way to know the card moved is to read the board, which is where the person is
+	// not. It rides both notices because those are the two moments a card changes column.
+	it("says which column the card is in when it reaches review", async () => {
+		const h = harness();
+		h.emit(summary({ state: "running" }));
+		h.emit(summary({ state: "awaiting_review", reviewReason: "hook" }));
+		await vi.waitFor(() => expect(h.notifyReadyForReview).toHaveBeenCalled());
+		expect(h.notifyReadyForReview.mock.calls[0]?.[0]?.column).toBe("review");
 	});
 });

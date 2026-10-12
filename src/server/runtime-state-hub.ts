@@ -7,6 +7,7 @@ import { WebSocket, WebSocketServer } from "ws";
 import { type ClineHubNotifier, createClineHubNotifier } from "../cline-sdk/cline-hub-notifier";
 import type { ClineTaskMessage, ClineTaskSessionService } from "../cline-sdk/cline-task-session-service";
 import type {
+	RuntimeBoardColumnId,
 	RuntimeClineMcpServerAuthStatus,
 	RuntimeStateStreamClineSessionContextUpdatedMessage,
 	RuntimeStateStreamErrorMessage,
@@ -354,24 +355,35 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 		workspaceId: string,
 		workspacePath: string | null,
 		taskId: string,
-	): Promise<{ taskTitle: string; workspaceName: string; priority?: RuntimeTaskPriority }> => {
+	): Promise<{
+		taskTitle: string;
+		workspaceName: string;
+		priority?: RuntimeTaskPriority;
+		column?: RuntimeBoardColumnId;
+	}> => {
 		let taskTitle = taskId;
 		let workspaceName = workspaceId;
 		let priority: RuntimeTaskPriority | undefined;
+		// Which column the card sits in right now. A subscriber showing one message per card
+		// needs it to keep that message current: without it the only way to know a card moved
+		// is to read the board, which is the thing the person is away from.
+		let column: RuntimeBoardColumnId | undefined;
 		if (workspacePath) {
 			try {
 				const snapshot = await deps.workspaceRegistry.buildWorkspaceStateSnapshot(workspaceId, workspacePath);
-				const card = snapshot.board.columns.flatMap((column) => column.cards).find((entry) => entry.id === taskId);
+				const holder = snapshot.board.columns.find((entry) => entry.cards.some((card) => card.id === taskId));
+				const card = holder?.cards.find((entry) => entry.id === taskId);
 				if (card) {
 					taskTitle = resolveTaskTitle(card.title, card.prompt);
 					priority = card.priority;
+					column = holder?.id;
 				}
 				workspaceName = basename(workspacePath) || workspaceId;
 			} catch {
 				// Keep the fallbacks.
 			}
 		}
-		return { taskTitle, workspaceName, priority };
+		return { taskTitle, workspaceName, priority, column };
 	};
 
 	const notifyHubTaskReadyForReview = async (
@@ -382,7 +394,11 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 		awaitingAnswer?: boolean,
 	): Promise<void> => {
 		try {
-			const { taskTitle, workspaceName, priority } = await resolveCardIdentity(workspaceId, workspacePath, taskId);
+			const { taskTitle, workspaceName, priority, column } = await resolveCardIdentity(
+				workspaceId,
+				workspacePath,
+				taskId,
+			);
 			await hubNotifier.notifyReadyForReview({
 				taskId,
 				taskTitle,
@@ -391,6 +407,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 				detail,
 				priority,
 				awaitingAnswer,
+				column,
 			});
 		} catch {
 			// Notification is an accessory and must never surface as a board error.
@@ -404,13 +421,14 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 		activity: string,
 	): Promise<void> => {
 		try {
-			const { taskTitle, workspaceName } = await resolveCardIdentity(workspaceId, workspacePath, taskId);
+			const { taskTitle, workspaceName, column } = await resolveCardIdentity(workspaceId, workspacePath, taskId);
 			await hubNotifier.notifyCardProgress({
 				taskId,
 				taskTitle,
 				workspaceName,
 				workspacePath: workspacePath ?? undefined,
 				activity,
+				column,
 			});
 		} catch {
 			// Progress is the most expendable thing on the board.

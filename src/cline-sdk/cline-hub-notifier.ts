@@ -30,6 +30,8 @@ export interface ClineHubNotifyClient {
 		body: string;
 		severity?: "info" | "warning" | "error";
 		source?: { workspacePath?: string; itemId?: string };
+		/** Column the card sits in, so a subscriber can keep one message per card current. */
+		column?: string;
 		supersedesPrevious?: boolean;
 		awaitingAnswer?: boolean;
 	}): Promise<void>;
@@ -49,6 +51,8 @@ export interface ClineHubNotifierOptions {
 }
 
 export interface ReadyForReviewNotification {
+	/** Column the card is in when this goes out: backlog | in_progress | review | done. */
+	column?: string;
 	taskId: string;
 	taskTitle: string;
 	workspaceName: string;
@@ -134,6 +138,7 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): C
 		workspacePath?: string;
 		supersedesPrevious?: boolean;
 		awaitingAnswer?: boolean;
+		column?: string;
 	}): Promise<void> => {
 		let client: ClineHubNotifyClient | undefined;
 		try {
@@ -159,6 +164,7 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): C
 				},
 				...(payload.supersedesPrevious ? { supersedesPrevious: true } : {}),
 				...(payload.awaitingAnswer ? { awaitingAnswer: true } : {}),
+				...(payload.column ? { column: payload.column } : {}),
 			});
 		} catch {
 			// Deliberately silent: a notification that fails must never surface as a board
@@ -192,6 +198,7 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): C
 				taskId: notification.taskId,
 				workspacePath: notification.workspacePath,
 				awaitingAnswer: notification.awaitingAnswer,
+				column: notification.column,
 				// Never supersedes: this one asks the person for something, so it has to arrive
 				// on its own instead of quietly replacing a status line.
 			});
@@ -203,6 +210,7 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): C
 				taskId: notification.taskId,
 				workspacePath: notification.workspacePath,
 				supersedesPrevious: true,
+				column: notification.column,
 			});
 		},
 	};
