@@ -55,6 +55,10 @@ vi.mock("@/utils/react-use", () => ({
 	},
 }));
 
+vi.mock("@/hooks/use-task-image-object-url", () => ({
+	useTaskImageObjectUrl: (image: { id: string } | undefined) => (image ? `blob:test/${image.id}` : undefined),
+}));
+
 vi.mock("@/utils/text-measure", () => ({
 	DEFAULT_TEXT_MEASURE_FONT: "400 14px sans-serif",
 	measureTextWidth: (value: string) => value.length * 8,
@@ -199,6 +203,69 @@ describe("BoardCard", () => {
 			button.textContent?.includes("Cancel Auto-"),
 		);
 		expect(nextCancelButton).toBeUndefined();
+	});
+
+	const pngImage = (id: string) => ({ id, data: "iVBORw==", mimeType: "image/png", name: `${id}.png` });
+
+	it("shows a card's first image behind its content", async () => {
+		await act(async () => {
+			root.render(<BoardCard card={createCard({ images: [pngImage("img1")] })} index={0} columnId="backlog" />);
+		});
+		const backdrop = container.querySelector<HTMLElement>("[data-card-image-backdrop]");
+		expect(backdrop?.style.backgroundImage).toContain("blob:test/img1");
+		expect(container.querySelector("[data-card-image-panel]")?.className).toContain("bg-surface-2/80");
+		expect(container.querySelector(".min-h-28")).not.toBeNull();
+	});
+
+	it("leaves a card without images exactly as it was", async () => {
+		await act(async () => {
+			root.render(<BoardCard card={createCard()} index={0} columnId="backlog" />);
+		});
+		expect(container.querySelector("[data-card-image-backdrop]")).toBeNull();
+		expect(container.querySelector(".min-h-28")).toBeNull();
+		expect(container.querySelector("[data-card-image-count]")).toBeNull();
+	});
+
+	it("counts the images when there is more than one", async () => {
+		await act(async () => {
+			root.render(
+				<BoardCard
+					card={createCard({ images: [pngImage("img1"), pngImage("img2")] })}
+					index={0}
+					columnId="backlog"
+				/>,
+			);
+		});
+		const count = container.querySelector("[data-card-image-count]");
+		expect(count?.textContent).toBe("2");
+		expect(count?.getAttribute("aria-label")).toBe("2 imagens");
+	});
+
+	// The dependency ring is an inset shadow on the card, which the picture's layers covered: while
+	// linking, an image card showed no ring as source or target.
+	it("keeps the dependency ring visible over the picture", async () => {
+		await act(async () => {
+			root.render(
+				<BoardCard
+					card={createCard({ images: [pngImage("img1")] })}
+					index={0}
+					columnId="backlog"
+					isDependencySource
+				/>,
+			);
+		});
+		expect(container.querySelector("[data-card-image-panel]")?.className).toContain(
+			"shadow-[inset_0_0_0_1px_var(--color-accent)]",
+		);
+	});
+
+	it("lists the images on the card that is open", async () => {
+		await act(async () => {
+			root.render(
+				<BoardCard card={createCard({ images: [pngImage("img1")] })} index={0} columnId="backlog" selected />,
+			);
+		});
+		expect(container.textContent).toContain("img1.png");
 	});
 
 	it("shows the card's tags, category and priority", async () => {

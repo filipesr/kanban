@@ -8,6 +8,7 @@ import type {
 	RuntimeBoardDependency,
 	RuntimeClineReasoningEffort,
 	RuntimeTaskClineSettings,
+	RuntimeTaskImage,
 	RuntimeTaskPriority,
 	RuntimeTaskSessionMode,
 	RuntimeTaskSessionSummary,
@@ -34,6 +35,7 @@ import { loadWorkspaceContext, mutateWorkspaceState } from "../state/workspace-s
 import type { RuntimeAppRouter } from "../trpc/app-router";
 import { probeGitWorkspaceState } from "../workspace/git-sync";
 import { getTaskWorkspacePathInfo } from "../workspace/task-worktree";
+import { readTaskImageFiles } from "./task-image-files";
 
 const LIST_TASK_COLUMNS = ["backlog", "in_progress", "review", "trash"] as const;
 type ListTaskColumn = (typeof LIST_TASK_COLUMNS)[number];
@@ -508,6 +510,7 @@ async function createTask(input: {
 	category?: string;
 	priority?: RuntimeTaskPriority;
 	source?: string;
+	images?: RuntimeTaskImage[];
 }): Promise<JsonRecord> {
 	const workspaceRepoPath = await resolveWorkspaceRepoPath(input.projectPath, input.cwd);
 	const workspaceId = await ensureRuntimeWorkspace(workspaceRepoPath);
@@ -533,6 +536,7 @@ async function createTask(input: {
 				category: input.category,
 				priority: input.priority,
 				source: input.source,
+				images: input.images,
 			},
 			() => globalThis.crypto.randomUUID(),
 		);
@@ -555,6 +559,7 @@ async function createTask(input: {
 			autoReviewEnabled: created.autoReviewEnabled === true,
 			autoReviewMode: created.autoReviewMode ?? "commit",
 			...(created.agentId ? { agentId: created.agentId } : {}),
+			...(created.images?.length ? { imageCount: created.images.length } : {}),
 			...formatTaskClineSettings(created.clineSettings),
 		},
 	};
@@ -936,6 +941,22 @@ export function resolveStartAgentId(
 	return override ?? undefined;
 }
 
+/** What starting a card's session sends: the same fields the board sends, images included. */
+export function buildTaskSessionStartRequest(task: RuntimeBoardCard, agentOverride: RuntimeAgentId | null | undefined) {
+	return {
+		taskId: task.id,
+		prompt: task.prompt,
+		taskTitle: task.title,
+		// The board has always sent these; the CLI did not, so a card filed with a screenshot and
+		// started from Telegram reached its agent without it.
+		images: task.images && task.images.length > 0 ? task.images : undefined,
+		startInPlanMode: task.startInPlanMode,
+		baseRef: task.baseRef,
+		agentId: resolveStartAgentId(agentOverride, task.agentId),
+		clineSettings: task.clineSettings,
+	};
+}
+
 async function startTask(input: {
 	cwd: string;
 	taskId: string;
@@ -983,15 +1004,9 @@ async function startTask(input: {
 			throw new Error(ensured.error ?? "Could not ensure task worktree.");
 		}
 
-		const started = await runtimeClient.runtime.startTaskSession.mutate({
-			taskId: task.id,
-			prompt: task.prompt,
-			taskTitle: task.title,
-			startInPlanMode: task.startInPlanMode,
-			baseRef: task.baseRef,
-			agentId: resolveStartAgentId(input.agentId, task.agentId),
-			clineSettings: task.clineSettings,
-		});
+		const started = await runtimeClient.runtime.startTaskSession.mutate(
+			buildTaskSessionStartRequest(task, input.agentId),
+		);
 		if (!started.ok || !started.summary) {
 			throw new Error(started.error ?? "Could not start task session.");
 		}
@@ -1408,6 +1423,12 @@ export function registerTaskCommand(program: Command): void {
 		.option("--category <text>", "Single category, e.g. bug | feature | infra.")
 		.option("--priority <level>", "Priority: high | medium | low.")
 		.option("--source <name>", "Where the task came from, e.g. telegram | kanban | cli.")
+		.option(
+			"--image <path>",
+			"Attach an image (png, jpg, gif, webp; up to 5 MB). Repeat for several.",
+			(value: string, previous: string[]) => [...previous, value],
+			[] as string[],
+		)
 		.option("--agent-id <id>", "Agent override: cline | claude | codex | droid | gemini | opencode | default.")
 		.option(
 			"--cline-provider <id>",
@@ -1438,6 +1459,7 @@ export function registerTaskCommand(program: Command): void {
 				category?: string;
 				priority?: string;
 				source?: string;
+				image: string[];
 			}) => {
 				await runTaskCommand(
 					async () =>
@@ -1455,6 +1477,8 @@ export function registerTaskCommand(program: Command): void {
 							category: normalizeTaskCategory(options.category),
 							priority: parseTaskPriorityOption(options.priority) ?? undefined,
 							source: options.source,
+							// Read before the card exists, so a refused image leaves no card behind.
+							images: options.image.length > 0 ? readTaskImageFiles(options.image) : undefined,
 							clineSettings: buildTaskClineSettingsForCreate({
 								providerId: parseOptionalStringOrDefault(options.clineProvider) ?? undefined,
 								modelId: parseOptionalStringOrDefault(options.clineModel) ?? undefined,

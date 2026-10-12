@@ -7,6 +7,7 @@ import {
 	AlertTriangle,
 	Bot,
 	GitBranch,
+	Image as ImageIcon,
 	LayoutGrid,
 	MessageSquare,
 	Pencil,
@@ -19,11 +20,13 @@ import {
 import type { KeyboardEvent, MouseEvent } from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { BoardCardImageBackdrop } from "@/components/board-card-image-backdrop";
 import {
 	formatClineReasoningEffortLabel,
 	formatClineSelectedModelButtonText,
 	resolveClineModelDisplayName,
 } from "@/components/detail-panels/cline-model-picker-options";
+import { TaskImageStrip } from "@/components/task-image-strip";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
 import { Spinner } from "@/components/ui/spinner";
@@ -324,11 +327,13 @@ export function BoardCard({
 	}
 	const sessionActivity = rawSessionActivity ?? lastSessionActivityRef.current;
 	const visibleTags = useMemo(() => resolveVisibleTags(card.tags), [card.tags]);
+	const cardImages = card.images ?? [];
+	const backdropImage = cardImages[0];
 	const sourceKind = resolveSourceKind(card.source);
 	const sourceIcon = sourceKind ? SOURCE_ICON[sourceKind] : null;
 	const cardDate = useMemo(() => formatCardDate(card.createdAt), [card.createdAt]);
 	// The row earns its space only when it has something to say.
-	const showTopRow = hasCardAttributes(card) || Boolean(sourceIcon) || Boolean(cardDate);
+	const showTopRow = hasCardAttributes(card) || Boolean(sourceIcon) || Boolean(cardDate) || cardImages.length > 1;
 	const displayTitle = useMemo(
 		() => normalizePromptForDisplay(card.title) || truncateTaskPromptLabel(card.prompt),
 		[card.prompt, card.title],
@@ -592,8 +597,18 @@ export function BoardCard({
 								isHovered && isCardInteractive && "bg-surface-3 border-border-bright",
 								isDependencySource && "kb-board-card-dependency-source",
 								isDependencyTarget && "kb-board-card-dependency-target",
+								// The picture sits behind the content in the card's own stacking context;
+								// a little taller than a plain card, never the picture's own size.
+								backdropImage && "relative isolate min-h-28 overflow-hidden",
 							)}
 						>
+							{backdropImage ? (
+								<BoardCardImageBackdrop
+									image={backdropImage}
+									highlighted={selected || (isHovered && isCardInteractive)}
+									ringed={isDependencySource || isDependencyTarget}
+								/>
+							) : null}
 							{showTopRow ? (
 								// Origin on the left, labels beside it, date pushed right: the row you
 								// scan a column by, above the title you read once you have stopped.
@@ -638,6 +653,17 @@ export function BoardCard({
 											<span className="text-[11px] text-text-tertiary">+{visibleTags.overflow}</span>
 										) : null}
 									</div>
+									{cardImages.length > 1 ? (
+										<span
+											data-card-image-count
+											role="img"
+											aria-label={`${cardImages.length} imagens`}
+											className="inline-flex shrink-0 items-center gap-0.5 text-[11px] text-text-tertiary"
+										>
+											<ImageIcon size={12} aria-hidden />
+											{cardImages.length}
+										</span>
+									) : null}
 									{cardDate ? (
 										<span className="shrink-0 text-[11px] text-text-tertiary">{cardDate}</span>
 									) : null}
@@ -803,6 +829,9 @@ export function BoardCard({
 										) : null}
 									</p>
 								</div>
+							) : null}
+							{selected && cardImages.length > 0 ? (
+								<TaskImageStrip images={cardImages} className="mt-2" />
 							) : null}
 							{taskAgentSettingsLabel ? (
 								<div className="mt-1">
