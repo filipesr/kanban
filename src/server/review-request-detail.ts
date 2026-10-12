@@ -80,6 +80,10 @@ function describeSilence(summary: RuntimeTaskSessionSummary, awaiting: boolean):
 		: "Stopped without reporting anything.";
 }
 
+function escapeForRegExp(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export function describeReviewRequest(summary: RuntimeTaskSessionSummary): string | undefined {
 	const activity = summary.latestHookActivity;
 	// A failure explains itself through the warning the runtime recorded; nothing the agent
@@ -101,7 +105,11 @@ export function describeReviewRequest(summary: RuntimeTaskSessionSummary): strin
 	// Naming the tool matters for a permission prompt: "may I run Bash" and "may I leave plan
 	// mode" are different enough decisions that the answer depends on which one it is.
 	const tool = activity?.toolName?.trim();
-	const prefix = awaiting && tool ? `${tool}: ` : "";
+	// Unless the text already names it, which is how "AskUserQuestion: Using AskUserQuestion:
+	// Gravar?" reached a person's phone -- the tool named twice before the question it was
+	// asking.
+	const alreadyNamed = tool ? new RegExp(`\\b${escapeForRegExp(tool)}\\b`).test(text) : false;
+	const prefix = awaiting && tool && !alreadyNamed ? `${tool}: ` : "";
 	return clip(`${prefix}${text}`);
 }
 

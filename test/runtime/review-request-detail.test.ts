@@ -252,3 +252,37 @@ describe("resolveReadyForReviewTitle", () => {
 		expect(resolveReadyForReviewTitle(undefined)).toBe("Ready for review");
 	});
 });
+
+describe("the tool is named once", () => {
+	// Reached a phone as "AskUserQuestion: Using AskUserQuestion: Gravar? — 1) Gravar 2)
+	// Descartar": the tool named twice before the question it was asking.
+	it("does not prefix a tool the text already names", () => {
+		const detail = describeReviewRequest(
+			summary({
+				latestHookActivity: activity({
+					toolName: "AskUserQuestion",
+					activityText: "Using AskUserQuestion: Gravar? — 1) Gravar 2) Descartar",
+					hookEventName: "Notification",
+					notificationType: "permission_prompt",
+				}),
+			}),
+		);
+		expect(detail).toBe("Using AskUserQuestion: Gravar? — 1) Gravar 2) Descartar");
+	});
+
+	// Still named when the text does not: "may I run Bash" and "may I leave plan mode" are
+	// different enough decisions that the answer depends on which one is being asked.
+	it("still names a tool the text leaves out", () => {
+		const detail = describeReviewRequest(
+			summary({
+				latestHookActivity: activity({
+					toolName: "ExitPlanMode",
+					activityText: "Plano pronto, posso seguir?",
+					hookEventName: "Notification",
+					notificationType: "permission_prompt",
+				}),
+			}),
+		);
+		expect(detail).toBe("ExitPlanMode: Plano pronto, posso seguir?");
+	});
+});
