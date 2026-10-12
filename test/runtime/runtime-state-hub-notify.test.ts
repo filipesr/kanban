@@ -186,6 +186,28 @@ describe("a running card saying what it is doing", () => {
 	});
 });
 
+describe("the home sidebar agent is not a card", () => {
+	const HOME = "__home_agent__:partyshare:claude";
+
+	it("does not announce the home agent starting to run", async () => {
+		// It has no card, so the line it produced was its synthetic session id followed by
+		// "Running": an activation notice for something nobody is waiting on from afar.
+		const h = harness();
+		h.emit(summary({ taskId: HOME, state: "idle" }));
+		h.emit(summary({ taskId: HOME, state: "running" }));
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		expect(h.notifyCardProgress).not.toHaveBeenCalled();
+	});
+
+	it("does not announce the home agent finishing a turn as a card for review", async () => {
+		const h = harness();
+		h.emit(summary({ taskId: HOME, state: "running" }));
+		h.emit(summary({ taskId: HOME, state: "awaiting_review", reviewReason: "exit", exitCode: 0 }));
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		expect(h.notifyReadyForReview).not.toHaveBeenCalled();
+	});
+});
+
 describe("what the review notice tells someone away from the board", () => {
 	it("carries the question the card is asking", async () => {
 		// Without it the notice can only send them to the board, which is where they were not.

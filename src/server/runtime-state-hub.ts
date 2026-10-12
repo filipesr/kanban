@@ -24,6 +24,7 @@ import type {
 	RuntimeTaskPriority,
 	RuntimeTaskSessionSummary,
 } from "../core/api-contract";
+import { isHomeAgentSessionId } from "../core/home-agent-session";
 import { resolveTaskTitle } from "../core/task-title";
 import type { TerminalSessionManager } from "../terminal/session-manager";
 import { buildCardClosingActions, canReceiveTaskInput, resolveCardClosingState } from "./card-closing-state";
@@ -507,6 +508,10 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 		// once they subscribe). The hub call is NOT inside broadcastTaskReadyForReview because
 		// that function returns early when no tab is open -- exactly the case this is for.
 		broadcastTaskReadyForReview(workspaceId, summary.taskId);
+		if (isHomeAgentSessionId(summary.taskId)) {
+			// The home sidebar agent is not a card: the hub would announce its synthetic session id.
+			return;
+		}
 		void notifyHubTaskReadyForReview(
 			workspaceId,
 			deps.workspaceRegistry.getWorkspacePathById(workspaceId),
@@ -522,6 +527,10 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 	 * one supersedes itself: it is a status line, not an interruption.
 	 */
 	const handleCardProgress = (workspaceId: string, summary: RuntimeTaskSessionSummary): void => {
+		if (isHomeAgentSessionId(summary.taskId)) {
+			// The home sidebar agent is not a card, so it has no status line to keep on a phone.
+			return;
+		}
 		let byTaskId = cardProgressByWorkspaceId.get(workspaceId);
 		if (!byTaskId) {
 			byTaskId = new Map<string, CardProgressState>();
