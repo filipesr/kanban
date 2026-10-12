@@ -77,22 +77,49 @@ describe("describeReviewRequest", () => {
 		expect(detail).toContain("exited with code 1");
 	});
 
-	it("collapses the newlines a terminal agent leaves behind", () => {
+	// The conclusion is the agent's own markdown: its lists and paragraphs are what make it
+	// readable on a phone. Flattened, "- **Hash:** … - **Mensagem:** …" became one run-on line.
+	it("keeps the lines and lists of a conclusion", () => {
 		const detail = describeReviewRequest(
-			summary({ latestHookActivity: activity({ finalMessage: "linha um\n\n  linha dois" }) }),
+			summary({
+				latestHookActivity: activity({
+					finalMessage:
+						"O commit está feito.\n\n\n\n- **Hash:**   `189af67`\n  - **Conflitos:** nenhum  \n\nPronto.",
+				}),
+			}),
 		);
-		expect(detail).toBe("linha um linha dois");
+		expect(detail).toBe("O commit está feito.\n\n- **Hash:** `189af67`\n  - **Conflitos:** nenhum\n\nPronto.");
+	});
+
+	// A question's text comes from the terminal, wrapped and padded by the TUI; there the line
+	// breaks are noise.
+	it("still collapses the newlines of a question read off the terminal", () => {
+		const detail = describeReviewRequest(
+			summary({
+				latestHookActivity: activity({
+					hookEventName: "PermissionRequest",
+					activityText: "Waiting for approval:\n   Faço o push?",
+				}),
+			}),
+		);
+		expect(detail).toBe("Waiting for approval: Faço o push?");
 	});
 
 	it("clips a long answer at a word boundary", () => {
 		const detail = describeReviewRequest(
 			summary({
-				latestHookActivity: activity({ finalMessage: `${"palavra ".repeat(200)}fim` }),
+				latestHookActivity: activity({ finalMessage: `${"palavra ".repeat(400)}fim` }),
 			}),
 		);
 		expect(detail?.endsWith("…")).toBe(true);
-		expect((detail ?? "").length).toBeLessThanOrEqual(601);
+		expect((detail ?? "").length).toBeLessThanOrEqual(1501);
 		expect(detail).not.toMatch(/\s…$/);
+	});
+
+	it("carries a conclusion of a usual length whole", () => {
+		const conclusion = `${"Uma frase do agente. ".repeat(50)}Fim.`;
+		const detail = describeReviewRequest(summary({ latestHookActivity: activity({ finalMessage: conclusion }) }));
+		expect(detail).toBe(conclusion);
 	});
 
 	// Was `undefined`, and that is what hid the worst failure of this path: a card whose agent

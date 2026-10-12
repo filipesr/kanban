@@ -16,7 +16,14 @@ import {
 	startCodexSessionWatcher,
 } from "./hook-events/codex-hook-events";
 import { enrichDroidReviewMetadata } from "./hook-events/droid-hook-events";
-import { asRecord, normalizeWhitespace, readNestedString, readStringField } from "./hook-events/hook-utils";
+import {
+	asRecord,
+	normalizeMessageText,
+	normalizeWhitespace,
+	readMessageField,
+	readNestedString,
+	readStringField,
+} from "./hook-events/hook-utils";
 import { normalizeKiroHookMetadata } from "./hook-events/kiro-hook-events";
 
 export {
@@ -108,7 +115,7 @@ function parseMetadataFromOptions(options: HookCommandMetadataOptionValues): Par
 		metadata.toolName = normalizeWhitespace(toolName);
 	}
 	if (finalMessage) {
-		metadata.finalMessage = normalizeWhitespace(finalMessage);
+		metadata.finalMessage = normalizeMessageText(finalMessage);
 	}
 	if (hookEventName) {
 		metadata.hookEventName = normalizeWhitespace(hookEventName);
@@ -299,7 +306,7 @@ export function inferHookSourceFromPayload(payload: Record<string, unknown> | nu
 	return null;
 }
 
-function normalizeHookMetadata(
+export function normalizeHookMetadata(
 	event: RuntimeHookEvent,
 	payload: Record<string, unknown> | null,
 	flagMetadata: Partial<RuntimeTaskHookActivity>,
@@ -340,9 +347,9 @@ function normalizeHookMetadata(
 			readNestedString(payload, ["notification", "event"]))
 		: null;
 	const finalMessage = payload
-		? (readStringField(payload, "last_assistant_message") ??
-			readStringField(payload, "lastAssistantMessage") ??
-			readStringField(payload, "last-assistant-message") ??
+		? (readMessageField(payload, "last_assistant_message") ??
+			readMessageField(payload, "lastAssistantMessage") ??
+			readMessageField(payload, "last-assistant-message") ??
 			readNestedString(payload, ["taskComplete", "taskMetadata", "result"]) ??
 			readNestedString(payload, ["taskComplete", "result"]))
 		: null;
@@ -353,7 +360,7 @@ function normalizeHookMetadata(
 		hookEventName: flagMetadata.hookEventName ?? hookEventName ?? null,
 		toolName: flagMetadata.toolName ?? toolName ?? null,
 		notificationType: flagMetadata.notificationType ?? notificationType ?? null,
-		finalMessage: flagMetadata.finalMessage ?? (finalMessage ? normalizeWhitespace(finalMessage) : null),
+		finalMessage: flagMetadata.finalMessage ?? finalMessage,
 		activityText: flagMetadata.activityText ?? (activityText ? normalizeWhitespace(activityText) : null),
 	};
 

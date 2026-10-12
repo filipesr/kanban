@@ -9,6 +9,11 @@ import type { RuntimeTaskSessionSummary } from "../core/api-contract";
  */
 
 const DETAIL_MAX_LENGTH = 600;
+/**
+ * A conclusion is read whole on a phone, where it is the point of the notice; 600 cut a usual
+ * one mid-list. Telegram's own limit is 4096, so this leaves room for the title and the card.
+ */
+const CONCLUSION_MAX_LENGTH = 1500;
 
 /** Hook events that mean the turn is over, whatever the agent did or did not say. */
 const COMPLETION_EVENTS = new Set(["posttooluse", "posttoolusefailure", "subagentstop", "stop"]);
@@ -36,15 +41,38 @@ export function isAwaitingAnswer(summary: RuntimeTaskSessionSummary): boolean {
 	return !COMPLETION_EVENTS.has(event);
 }
 
-function clip(value: string): string {
-	const collapsed = value.replace(/\s+/g, " ").trim();
-	if (collapsed.length <= DETAIL_MAX_LENGTH) {
-		return collapsed;
+function clipAt(value: string, maxLength: number): string {
+	if (value.length <= maxLength) {
+		return value;
 	}
-	const clipped = collapsed.slice(0, DETAIL_MAX_LENGTH);
-	const lastSpace = clipped.lastIndexOf(" ");
-	const base = lastSpace > DETAIL_MAX_LENGTH / 2 ? clipped.slice(0, lastSpace) : clipped;
+	const clipped = value.slice(0, maxLength);
+	const lastBreak = Math.max(clipped.lastIndexOf(" "), clipped.lastIndexOf("\n"));
+	const base = lastBreak > maxLength / 2 ? clipped.slice(0, lastBreak) : clipped;
 	return `${base.trimEnd()}…`;
+}
+
+/** Text read off the terminal, where line breaks are the TUI's wrapping, not the agent's. */
+function clip(value: string): string {
+	return clipAt(value.replace(/\s+/g, " ").trim(), DETAIL_MAX_LENGTH);
+}
+
+/**
+ * The agent's conclusion, which is its own markdown: lists and paragraphs are kept, because they
+ * are what makes it readable. Only the noise goes -- runs of spaces inside a line, trailing
+ * spaces, and more than one blank line in a row. Leading indentation stays: it is what nests a
+ * list.
+ */
+function clipConclusion(value: string): string {
+	const tidied = value
+		.split("\n")
+		.map((line) => {
+			const indent = line.match(/^[ \t]*/)?.[0] ?? "";
+			return `${indent}${line.slice(indent.length).replace(/[ \t]+/g, " ")}`.trimEnd();
+		})
+		.join("\n")
+		.replace(/\n{3,}/g, "\n\n")
+		.trim();
+	return clipAt(tidied, CONCLUSION_MAX_LENGTH);
 }
 
 /**
@@ -96,11 +124,14 @@ export function describeReviewRequest(summary: RuntimeTaskSessionSummary): strin
 	// A card that is not asking has only one thing worth saying: what it concluded. Its current
 	// tool call is not that -- "Completed AskUserQuestion: Devo gravar? 1) Gravar 2) Descartar"
 	// replays a question that was already answered, and reads as being asked twice.
-	const text = awaiting
-		? activity?.activityText?.trim() || activity?.finalMessage?.trim()
-		: activity?.finalMessage?.trim();
+	const question = awaiting ? activity?.activityText?.trim() : undefined;
+	const conclusion = activity?.finalMessage?.trim();
+	const text = question || conclusion;
 	if (!text) {
 		return describeSilence(summary, awaiting);
+	}
+	if (!question) {
+		return clipConclusion(text);
 	}
 	// Naming the tool matters for a permission prompt: "may I run Bash" and "may I leave plan
 	// mode" are different enough decisions that the answer depends on which one it is.
