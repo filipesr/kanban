@@ -67,8 +67,6 @@ describe("TaskImageStrip", () => {
 		const onCardClick = vi.fn();
 		await act(async () =>
 			root.render(
-				// biome-ignore lint/a11y/useKeyWithClickEvents: stands in for the card that holds the strip
-				// biome-ignore lint/a11y/noStaticElementInteractions: stands in for the card that holds the strip
 				<div onClick={onCardClick}>
 					<TaskImageStrip images={[image]} />
 				</div>,
