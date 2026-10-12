@@ -1,6 +1,5 @@
+import type { TaskGitAction } from "@runtime-task-git-action-prompt";
 import { useCallback, useEffect, useRef } from "react";
-
-import type { TaskGitAction } from "@/git-actions/build-task-git-action-prompt";
 import { findCardSelection } from "@/state/board-state";
 import { getTaskWorkspaceSnapshot, subscribeToAnyTaskMetadata } from "@/stores/workspace-metadata-store";
 import type { BoardCard, BoardColumnId, BoardData, TaskAutoReviewMode } from "@/types";

@@ -1,4 +1,4 @@
-import type { RuntimeTaskAutoReviewMode, RuntimeTaskWorkspaceInfoResponse } from "@/runtime/types";
+import type { RuntimeTaskAutoReviewMode } from "./api-contract";
 
 export type TaskGitAction = Extract<RuntimeTaskAutoReviewMode, "commit" | "pr">;
 
@@ -23,7 +23,8 @@ export interface TaskGitPromptTemplates {
 
 interface BuildTaskGitActionPromptInput {
 	action: TaskGitAction;
-	workspaceInfo: RuntimeTaskWorkspaceInfoResponse;
+	/** The branch the task worktree was created from. */
+	baseRef: string;
 	templates?: TaskGitPromptTemplates | null;
 }
 
@@ -60,7 +61,7 @@ function interpolateTemplate(template: string, variables: Record<string, string>
 
 export function buildTaskGitActionPrompt(input: BuildTaskGitActionPromptInput): string {
 	const variables: Record<string, string> = {
-		[TASK_GIT_BASE_REF_PROMPT_VARIABLE.key]: input.workspaceInfo.baseRef,
+		[TASK_GIT_BASE_REF_PROMPT_VARIABLE.key]: input.baseRef,
 	};
 	const template = resolveTemplate(input.action, input.templates);
 	return interpolateTemplate(template, variables);

@@ -1,24 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import {
-	buildTaskGitActionPrompt,
-	TASK_GIT_BASE_REF_PROMPT_VARIABLE,
-} from "@/git-actions/build-task-git-action-prompt";
+import { buildTaskGitActionPrompt, TASK_GIT_BASE_REF_PROMPT_VARIABLE } from "../../src/core/task-git-action-prompt";
 
 describe("buildTaskGitActionPrompt", () => {
 	it("interpolates the shared base ref variable into custom templates", () => {
 		expect(
 			buildTaskGitActionPrompt({
 				action: "commit",
-				workspaceInfo: {
-					taskId: "task-123",
-					path: "/tmp/task-123",
-					exists: true,
-					baseRef: "main",
-					branch: null,
-					isDetached: true,
-					headCommit: "abc123",
-				},
+				baseRef: "main",
 				templates: {
 					commitPromptTemplate: `Commit onto ${TASK_GIT_BASE_REF_PROMPT_VARIABLE.token}.`,
 				},
@@ -30,15 +19,7 @@ describe("buildTaskGitActionPrompt", () => {
 		expect(
 			buildTaskGitActionPrompt({
 				action: "pr",
-				workspaceInfo: {
-					taskId: "task-123",
-					path: "/tmp/task-123",
-					exists: true,
-					baseRef: "main",
-					branch: null,
-					isDetached: true,
-					headCommit: "abc123",
-				},
+				baseRef: "main",
 			}),
 		).toBe("Handle this pull request action using the provided git context.");
 	});

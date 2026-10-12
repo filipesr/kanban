@@ -6,6 +6,7 @@ import {
 	isAwaitingAnswer,
 	resolveReadyForReviewTitle,
 } from "../../src/server/review-request-detail";
+import { reduceSessionTransition } from "../../src/terminal/session-state-machine";
 
 function activity(patch: Record<string, unknown> = {}) {
 	return {
@@ -284,5 +285,29 @@ describe("the tool is named once", () => {
 			}),
 		);
 		expect(detail).toBe("ExitPlanMode: Plano pronto, posso seguir?");
+	});
+});
+
+describe("a question asked in the turn after a conclusion", () => {
+	// Both halves together: the state machine starting the turn, and the notice reading it.
+	it("is announced as a question, with its own text", () => {
+		const concluded = summary({
+			latestHookActivity: activity({
+				activityText: "Final: O merge está feito.",
+				finalMessage: "O merge está feito.",
+				hookEventName: "Stop",
+			}),
+		});
+		const nextTurn = { ...concluded, ...reduceSessionTransition(concluded, { type: "hook.to_in_progress" }).patch };
+		const asking = summary({
+			latestHookActivity: activity({
+				...nextTurn.latestHookActivity,
+				activityText: "Waiting for approval: Faço o push? 1) Sim 2) Não",
+				hookEventName: "PermissionRequest",
+			}),
+		});
+		expect(isAwaitingAnswer(asking)).toBe(true);
+		expect(describeReviewRequest(asking)).toContain("Faço o push?");
+		expect(describeReviewRequest(asking)).not.toContain("O merge está feito");
 	});
 });

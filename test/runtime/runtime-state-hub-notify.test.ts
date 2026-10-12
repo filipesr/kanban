@@ -33,7 +33,9 @@ function summary(patch: Partial<RuntimeTaskSessionSummary>): RuntimeTaskSessionS
 	};
 }
 
-function harness() {
+function harness(
+	options: { closing?: { next: "integrate" | "push" | null; unintegratedCommits: number; unknown?: true } } = {},
+) {
 	const notifyReadyForReview = vi.fn<
 		(notification: {
 			taskId: string;
@@ -44,6 +46,7 @@ function harness() {
 			priority?: string;
 			awaitingAnswer?: boolean;
 			column?: string;
+			actions?: Array<{ id: string; label: string; confirm?: string }>;
 		}) => Promise<void>
 	>(async () => undefined);
 	const notifyCardProgress = vi.fn<
@@ -67,6 +70,7 @@ function harness() {
 	>(async () => undefined);
 	const hub = createRuntimeStateHub({
 		hubNotifier: { notifyReadyForReview, notifyCardProgress, notifyCardMoved },
+		resolveCardClosingState: async () => options.closing ?? { next: null, unintegratedCommits: 0 },
 		workspaceRegistry: {
 			getWorkspacePathById: () => REPO,
 			buildWorkspaceStateSnapshot: async () => ({
@@ -74,7 +78,7 @@ function harness() {
 					columns: [
 						{
 							id: "review",
-							cards: [{ id: "461e5", title: "Cartão de teste", priority: "high" }],
+							cards: [{ id: "461e5", title: "Cartão de teste", priority: "high", baseRef: "main" }],
 						},
 					],
 				},
@@ -282,5 +286,61 @@ describe("the column travels with the notice", () => {
 		h.emit(summary({ state: "awaiting_review", reviewReason: "hook" }));
 		await vi.waitFor(() => expect(h.notifyReadyForReview).toHaveBeenCalled());
 		expect(h.notifyReadyForReview.mock.calls[0]?.[0]?.column).toBe("review");
+	});
+});
+
+describe("closing a finished card from the conversation", () => {
+	it("offers the next step and Concluir on a card that finished", async () => {
+		const h = harness({ closing: { next: "integrate", unintegratedCommits: 0 } });
+		h.emit(summary({ state: "running", pid: 4242 }));
+		h.emit(summary({ state: "awaiting_review", reviewReason: "hook", pid: 4242 }));
+		await vi.waitFor(() => expect(h.notifyReadyForReview).toHaveBeenCalledTimes(1));
+		expect(h.notifyReadyForReview.mock.calls[0]?.[0]?.actions).toEqual([
+			{ id: "integrate", label: "Integrar na main" },
+			{ id: "done", label: "Concluir" },
+		]);
+	});
+
+	// An agent whose process exited cannot be typed into, so Integrar would be refused forever.
+	it("does not offer integrate on a terminal card whose process is gone", async () => {
+		const h = harness({ closing: { next: "integrate", unintegratedCommits: 1 } });
+		h.emit(summary({ state: "running" }));
+		h.emit(summary({ state: "awaiting_review", reviewReason: "exit", exitCode: 0, pid: null }));
+		await vi.waitFor(() => expect(h.notifyReadyForReview).toHaveBeenCalledTimes(1));
+		expect(h.notifyReadyForReview.mock.calls[0]?.[0]?.actions?.map((action) => action.id)).toEqual(["done"]);
+	});
+
+	// A native Cline card never has a pid, and still takes the prompt as a chat message.
+	it("offers integrate on a native Cline card", async () => {
+		const h = harness({ closing: { next: "integrate", unintegratedCommits: 0 } });
+		h.emit(summary({ state: "running", agentId: "cline", pid: null }));
+		h.emit(summary({ state: "awaiting_review", reviewReason: "hook", agentId: "cline", pid: null }));
+		await vi.waitFor(() => expect(h.notifyReadyForReview).toHaveBeenCalledTimes(1));
+		expect(h.notifyReadyForReview.mock.calls[0]?.[0]?.actions?.[0]?.id).toBe("integrate");
+	});
+
+	// A card that is asking gets its question's choices; closing buttons there would be a
+	// second, unrelated set of things to tap.
+	it("offers nothing to close on a card that is asking", async () => {
+		const h = harness({ closing: { next: "integrate", unintegratedCommits: 0 } });
+		h.emit(summary({ state: "running" }));
+		h.emit(
+			summary({
+				state: "awaiting_review",
+				reviewReason: "hook",
+				latestHookActivity: {
+					activityText: "Faço o push? 1) Sim 2) Não",
+					toolName: "AskUserQuestion",
+					toolInputSummary: null,
+					finalMessage: null,
+					hookEventName: "PreToolUse",
+					notificationType: null,
+					source: "claude",
+				},
+			}),
+		);
+		await vi.waitFor(() => expect(h.notifyReadyForReview).toHaveBeenCalledTimes(1));
+		expect(h.notifyReadyForReview.mock.calls[0]?.[0]?.awaitingAnswer).toBe(true);
+		expect(h.notifyReadyForReview.mock.calls[0]?.[0]?.actions).toBeUndefined();
 	});
 });

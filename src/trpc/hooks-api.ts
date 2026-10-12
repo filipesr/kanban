@@ -75,6 +75,13 @@ export function createHooksApi(deps: CreateHooksApiDependencies): RuntimeTrpcCon
 					} satisfies RuntimeHookIngestResponse;
 				}
 
+				// Stored before the transition, because entering review is what announces the card and
+				// the announcement reads what the agent said. Stored after, every notification carried
+				// the previous turn's conclusion.
+				if (body.metadata) {
+					manager.applyHookActivity(taskId, body.metadata);
+				}
+
 				const transitionedSummary =
 					event === "to_review" ? manager.transitionToReview(taskId, "hook") : manager.transitionToRunning(taskId);
 				if (!transitionedSummary) {
@@ -106,10 +113,6 @@ export function createHooksApi(deps: CreateHooksApiDependencies): RuntimeTrpcCon
 					} catch {
 						// Best effort checkpointing only.
 					}
-				}
-
-				if (body.metadata) {
-					manager.applyHookActivity(taskId, body.metadata);
 				}
 
 				void deps.broadcastRuntimeWorkspaceStateUpdated(workspaceId, workspacePath);

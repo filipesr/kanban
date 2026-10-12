@@ -51,6 +51,12 @@ export function reduceSessionTransition(
 				patch: {
 					state: "running",
 					reviewReason: null,
+					// A new turn has not concluded anything yet. Kept, the previous conclusion is
+					// read as this turn's final word, and a question asked now is announced as
+					// finished, carrying the old text.
+					...(summary.latestHookActivity
+						? { latestHookActivity: { ...summary.latestHookActivity, finalMessage: null } }
+						: {}),
 				},
 				clearAttentionBuffer: true,
 			};

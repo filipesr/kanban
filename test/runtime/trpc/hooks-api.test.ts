@@ -145,4 +145,48 @@ describe("createHooksApi", () => {
 			ref: "refs/kanban/checkpoints/task-1/turn/1",
 		});
 	});
+
+	// The defect: entering review is what announces the card, and it read the final message
+	// before this hook had stored it -- so every notification carried the previous turn's
+	// conclusion. After "faz o merge com o main", the phone said "Reorganizei o cabeçalho...".
+	it("records the turn's final message before the card enters review", async () => {
+		const manager = {
+			getSummary: vi.fn(() => createSummary({ state: "running" })),
+			transitionToReview: vi.fn(() => createSummary({ state: "awaiting_review", reviewReason: "hook" })),
+			transitionToRunning: vi.fn(),
+			applyHookActivity: vi.fn(),
+			applyTurnCheckpoint: vi.fn(),
+		} as unknown as TerminalSessionManager;
+
+		const api = createHooksApi({
+			getWorkspacePathById: vi.fn(() => "/tmp/repo"),
+			ensureTerminalManagerForWorkspace: vi.fn(async () => manager),
+			broadcastRuntimeWorkspaceStateUpdated: vi.fn(),
+			broadcastTaskReadyForReview: vi.fn(),
+			captureTaskTurnCheckpoint: vi.fn(async () => ({
+				turn: 1,
+				ref: "refs/kanban/checkpoints/task-1/turn/1",
+				commit: "1111111",
+				createdAt: 1,
+			})),
+			deleteTaskTurnCheckpointRef: vi.fn(async () => undefined),
+		});
+
+		await api.ingest({
+			taskId: "task-1",
+			workspaceId: "workspace-1",
+			event: "to_review",
+			metadata: { hookEventName: "Stop", finalMessage: "O merge está feito." },
+		});
+
+		const applyHookActivity = vi.mocked(manager.applyHookActivity);
+		const transitionToReview = vi.mocked(manager.transitionToReview);
+		expect(applyHookActivity).toHaveBeenCalledWith("task-1", {
+			hookEventName: "Stop",
+			finalMessage: "O merge está feito.",
+		});
+		expect(applyHookActivity.mock.invocationCallOrder[0]).toBeLessThan(
+			transitionToReview.mock.invocationCallOrder[0] ?? 0,
+		);
+	});
 });

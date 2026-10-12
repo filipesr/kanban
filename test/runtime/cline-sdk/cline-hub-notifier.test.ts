@@ -195,4 +195,28 @@ describe("priority in the review notice", () => {
 			expect(sent[0]?.body).not.toContain("[alta]");
 		}
 	});
+
+	it("carries the closing actions so the card can be closed from the conversation", async () => {
+		const sendNotify = vi.fn(async (_payload: Record<string, unknown>) => undefined);
+		const notifier = createClineHubNotifier({
+			isEnabled: async () => true,
+			readDiscovery: async () => ({ url: "ws://127.0.0.1:1/hub", authToken: "tok" }),
+			createClient: () => ({ connect: async () => undefined, sendNotify, dispose: async () => undefined }),
+		});
+		await notifier.notifyReadyForReview({
+			taskId: "52609",
+			taskTitle: "Ajuste os links",
+			workspaceName: "work-os",
+			actions: [
+				{ id: "integrate", label: "Integrar na main" },
+				{ id: "done", label: "Concluir" },
+			],
+		});
+		expect(sendNotify.mock.calls[0]?.[0]).toMatchObject({
+			actions: [
+				{ id: "integrate", label: "Integrar na main" },
+				{ id: "done", label: "Concluir" },
+			],
+		});
+	});
 });

@@ -8,7 +8,7 @@ kanban \- local orchestration board for coding agents
 .RI [ command ]
 .br
 .B kanban task
-.RI " " list|create|update|link|unlink|start
+.RI " " list|create|update|link|unlink|start|integrate|closing-state|push
 .RI " " [ options ]
 .br
 .B kanban hooks
@@ -78,6 +78,21 @@ Subcommands:
 .RI [ --project-path " " path ]
 .br
 .B start
+.B --task-id
+.RI " " id
+.RI [ --project-path " " path ]
+.br
+.B integrate
+.B --task-id
+.RI " " id
+.RI [ --project-path " " path ]
+.br
+.B closing-state
+.B --task-id
+.RI " " id
+.RI [ --project-path " " path ]
+.br
+.B push
 .B --task-id
 .RI " " id
 .RI [ --project-path " " path ]

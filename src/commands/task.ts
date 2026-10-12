@@ -9,6 +9,8 @@ import type {
 	RuntimeClineReasoningEffort,
 	RuntimeTaskClineSettings,
 	RuntimeTaskPriority,
+	RuntimeTaskSessionMode,
+	RuntimeTaskSessionSummary,
 	RuntimeWorkspaceStateResponse,
 } from "../core/api-contract";
 import { runtimeAgentIdSchema, runtimeClineReasoningEffortSchema } from "../core/api-contract";
@@ -25,9 +27,13 @@ import {
 	trashTaskAndGetReadyLinkedTaskIds,
 	updateTask,
 } from "../core/task-board-mutations";
+import { buildTaskGitActionPrompt } from "../core/task-git-action-prompt";
 import { resolveProjectInputPath } from "../projects/project-path";
+import { buildCardClosingActions, canReceiveTaskInput, resolveCardClosingState } from "../server/card-closing-state";
 import { loadWorkspaceContext, mutateWorkspaceState } from "../state/workspace-state";
 import type { RuntimeAppRouter } from "../trpc/app-router";
+import { probeGitWorkspaceState } from "../workspace/git-sync";
+import { getTaskWorkspacePathInfo } from "../workspace/task-worktree";
 
 const LIST_TASK_COLUMNS = ["backlog", "in_progress", "review", "trash"] as const;
 type ListTaskColumn = (typeof LIST_TASK_COLUMNS)[number];
@@ -703,6 +709,53 @@ async function unlinkTasks(input: { cwd: string; dependencyId: string; projectPa
 	};
 }
 
+type RuntimeTrpcClient = ReturnType<typeof createRuntimeTrpcClient>;
+
+/** Same pause the board leaves between typing into a terminal agent and pressing Enter. */
+const TASK_INPUT_SUBMIT_DELAY_MS = 200;
+
+/** Delivers text into a task's session so that it is submitted, not just typed. */
+async function deliverTaskInput(input: {
+	runtimeClient: RuntimeTrpcClient;
+	workspaceRepoPath: string;
+	taskId: string;
+	text: string;
+	mode?: RuntimeTaskSessionMode;
+}): Promise<void> {
+	const runtimeState = await input.runtimeClient.workspace.getState.query();
+	const plan = planTaskInputDelivery(runtimeState.sessions[input.taskId] ?? null, input.text, input.mode);
+	// Refused rather than queued: typing into a session that is not there would look like it
+	// worked, and the answer would be lost somewhere between the board and the agent.
+	if (plan.kind === "refuse") {
+		throw new Error(`Task "${input.taskId}" has no running session in workspace ${input.workspaceRepoPath}.`);
+	}
+	if (plan.kind === "chat") {
+		const sent = await input.runtimeClient.runtime.sendTaskChatMessage.mutate({
+			taskId: input.taskId,
+			text: input.text,
+			...(plan.mode ? { mode: plan.mode } : {}),
+		});
+		if (!sent.ok) {
+			throw new Error(sent.error ?? `Task "${input.taskId}" did not accept the message.`);
+		}
+		return;
+	}
+	for (const [index, write] of plan.writes.entries()) {
+		if (index > 0) {
+			await new Promise<void>((resolve) => {
+				setTimeout(resolve, TASK_INPUT_SUBMIT_DELAY_MS);
+			});
+		}
+		const result = await input.runtimeClient.runtime.sendTaskSessionInput.mutate({
+			taskId: input.taskId,
+			...write,
+		});
+		if (!result.ok) {
+			throw new Error(result.error ?? `Task "${input.taskId}" did not accept the input.`);
+		}
+	}
+}
+
 /**
  * Sends text into a running task's agent session -- the answer to a question the agent asked.
  *
@@ -723,22 +776,145 @@ async function sendTaskInput(input: {
 	const workspaceRepoPath = await resolveWorkspaceRepoPath(input.projectPath, input.cwd);
 	const workspaceId = await ensureRuntimeWorkspace(workspaceRepoPath);
 	const runtimeClient = createRuntimeTrpcClient(workspaceId);
-	const runtimeState = await runtimeClient.workspace.getState.query();
-	const session = runtimeState.sessions[input.taskId] ?? null;
-	// Refused rather than queued: typing into a session that is not there would look like it
-	// worked, and the answer would be lost somewhere between the board and the agent.
-	if (!session || session.pid === null) {
-		throw new Error(`Task "${input.taskId}" has no running session in workspace ${workspaceRepoPath}.`);
-	}
-	const result = await runtimeClient.runtime.sendTaskSessionInput.mutate({
-		taskId: input.taskId,
-		text,
-		appendNewline: true,
-	});
+	await deliverTaskInput({ runtimeClient, workspaceRepoPath, taskId: input.taskId, text });
 	return {
-		ok: result.ok,
+		ok: true,
 		taskId: input.taskId,
 		workspacePath: workspaceRepoPath,
+	};
+}
+
+/** The card a closing command acts on, with the runtime client it was found through. */
+async function resolveClosingTarget(input: { cwd: string; taskId: string; projectPath?: string }): Promise<{
+	runtimeClient: RuntimeTrpcClient;
+	workspaceRepoPath: string;
+	task: RuntimeBoardCard;
+}> {
+	const workspaceRepoPath = await resolveWorkspaceRepoPath(input.projectPath, input.cwd);
+	const workspaceId = await ensureRuntimeWorkspace(workspaceRepoPath);
+	const runtimeClient = createRuntimeTrpcClient(workspaceId);
+	const state = await runtimeClient.workspace.getState.query();
+	const record = findTaskRecord(state, input.taskId);
+	if (!record) {
+		throw new Error(`Task "${input.taskId}" was not found in workspace ${workspaceRepoPath}.`);
+	}
+	return { runtimeClient, workspaceRepoPath, task: record.task };
+}
+
+/**
+ * Sends the project's commit prompt into the card, the same one the board's Commit button sends:
+ * commit in the worktree, then bring it onto the card's base. The agent works it out, conflicts
+ * included, and its conclusion comes back as the next review notification.
+ */
+async function integrateTask(input: { cwd: string; taskId: string; projectPath?: string }): Promise<JsonRecord> {
+	const { runtimeClient, workspaceRepoPath, task } = await resolveClosingTarget(input);
+	const config = await runtimeClient.runtime.getConfig.query();
+	const prompt = buildTaskGitActionPrompt({
+		action: "commit",
+		baseRef: task.baseRef,
+		templates: {
+			commitPromptTemplate: config.commitPromptTemplate,
+			commitPromptTemplateDefault: config.commitPromptTemplateDefault,
+		},
+	});
+	// Act mode, as the board's Commit button asks: a card left planning would only plan the commit.
+	await deliverTaskInput({ runtimeClient, workspaceRepoPath, taskId: input.taskId, text: prompt, mode: "act" });
+	return { ok: true, taskId: input.taskId, workspacePath: workspaceRepoPath, baseRef: task.baseRef };
+}
+
+/**
+ * What is still missing to close the card, worked out from git now -- not as of the notification
+ * that offered the button. A Concluir tapped on an older message would otherwise trust a state
+ * from before the agent's latest commits, and discard them without asking.
+ */
+async function describeTaskClosing(input: { cwd: string; taskId: string; projectPath?: string }): Promise<JsonRecord> {
+	const { runtimeClient, workspaceRepoPath, task } = await resolveClosingTarget(input);
+	const state = await runtimeClient.workspace.getState.query();
+	const session = state.sessions[input.taskId] ?? null;
+	const worktree = await getTaskWorkspacePathInfo({
+		cwd: workspaceRepoPath,
+		taskId: input.taskId,
+		baseRef: task.baseRef,
+	});
+	const closing = await resolveCardClosingState({
+		worktreePath: worktree.exists ? worktree.path : null,
+		repoPath: workspaceRepoPath,
+		baseRef: task.baseRef,
+	});
+	return {
+		ok: true,
+		taskId: input.taskId,
+		workspacePath: workspaceRepoPath,
+		...closing,
+		actions: buildCardClosingActions(closing, task.baseRef, {
+			canIntegrate: session ? canReceiveTaskInput(session) : false,
+		}),
+	};
+}
+
+export function assertPushableBase(currentBranch: string | null, baseRef: string): void {
+	if (currentBranch !== baseRef) {
+		throw new Error(
+			`The repository is on ${currentBranch ?? "a detached HEAD"}, not ${baseRef}. Check out ${baseRef} to push it.`,
+		);
+	}
+}
+
+/** Pushes the card's base from the repository, as the board's push button does. No agent turn. */
+async function pushTask(input: { cwd: string; taskId: string; projectPath?: string }): Promise<JsonRecord> {
+	const { runtimeClient, workspaceRepoPath, task } = await resolveClosingTarget(input);
+	const probe = await probeGitWorkspaceState(workspaceRepoPath);
+	assertPushableBase(probe.currentBranch, task.baseRef);
+	const result = await runtimeClient.workspace.runGitSyncAction.mutate({ action: "push" });
+	if (!result.ok) {
+		throw new Error(result.error ?? "Push failed.");
+	}
+	return { ok: true, taskId: input.taskId, workspacePath: workspaceRepoPath, output: result.output.trim() };
+}
+
+/** Bracketed-paste markers: what a terminal sends around text that was pasted, not typed. */
+const BRACKETED_PASTE_START = "\u001b[200~";
+const BRACKETED_PASTE_END = "\u001b[201~";
+
+export type TaskInputDelivery =
+	| { kind: "refuse" }
+	| { kind: "chat"; mode?: RuntimeTaskSessionMode }
+	| { kind: "terminal"; writes: Array<{ text: string; appendNewline: false }> };
+
+/**
+ * How text has to reach a session to be submitted, not just typed.
+ *
+ * A terminal agent such as Claude Code reads a newline that arrives with the text as a line
+ * break inside its prompt, so the answer sat there until someone opened the card and pressed
+ * Enter. The board avoids this by typing first and sending Enter on its own; this does the same.
+ * Text spanning lines -- the commit prompt -- is pasted, as the board pastes it, so its newlines
+ * are text rather than key presses.
+ *
+ * A native Cline session has no process of its own, so its `pid` says nothing about whether it
+ * can answer. It takes text as a chat message, which the runtime can also deliver to a persisted
+ * session by rebinding it.
+ */
+export function planTaskInputDelivery(
+	session: Pick<RuntimeTaskSessionSummary, "agentId" | "pid"> | null,
+	text: string,
+	mode?: RuntimeTaskSessionMode,
+): TaskInputDelivery {
+	if (!session) {
+		return { kind: "refuse" };
+	}
+	if (session.agentId === "cline") {
+		return mode ? { kind: "chat", mode } : { kind: "chat" };
+	}
+	if (session.pid === null) {
+		return { kind: "refuse" };
+	}
+	const typed = text.includes("\n") ? `${BRACKETED_PASTE_START}${text}${BRACKETED_PASTE_END}` : text;
+	return {
+		kind: "terminal",
+		writes: [
+			{ text: typed, appendNewline: false },
+			{ text: "\r", appendNewline: false },
+		],
 	};
 }
 
@@ -1470,6 +1646,48 @@ export function registerTaskCommand(program: Command): void {
 						text: options.text,
 						projectPath: options.projectPath,
 					}),
+			);
+		});
+
+	task
+		.command("integrate")
+		.description("Send the project's commit prompt into a running task, to bring its work onto its base branch.")
+		.requiredOption("--task-id <id>", "Task ID.")
+		.option("--project-path <path>", "Workspace path. Defaults to current directory workspace.")
+		.action(async (options: { taskId: string; projectPath?: string }) => {
+			await runTaskCommand(
+				async () =>
+					await integrateTask({ cwd: process.cwd(), taskId: options.taskId, projectPath: options.projectPath }),
+			);
+		});
+
+	task
+		.command("closing-state")
+		.description(
+			"Show what is still missing to close a task: integrate, push, or nothing, and what Done would discard.",
+		)
+		.requiredOption("--task-id <id>", "Task ID.")
+		.option("--project-path <path>", "Workspace path. Defaults to current directory workspace.")
+		.action(async (options: { taskId: string; projectPath?: string }) => {
+			await runTaskCommand(
+				async () =>
+					await describeTaskClosing({
+						cwd: process.cwd(),
+						taskId: options.taskId,
+						projectPath: options.projectPath,
+					}),
+			);
+		});
+
+	task
+		.command("push")
+		.description("Push the task's base branch from the repository.")
+		.requiredOption("--task-id <id>", "Task ID.")
+		.option("--project-path <path>", "Workspace path. Defaults to current directory workspace.")
+		.action(async (options: { taskId: string; projectPath?: string }) => {
+			await runTaskCommand(
+				async () =>
+					await pushTask({ cwd: process.cwd(), taskId: options.taskId, projectPath: options.projectPath }),
 			);
 		});
 

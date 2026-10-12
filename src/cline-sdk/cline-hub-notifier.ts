@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { HubUIClient, readHubDiscovery, resolveClineDataDir } from "@clinebot/core";
 import { resolveClineBuildEnv } from "@clinebot/shared";
 import { loadGlobalRuntimeConfig } from "../config/runtime-config";
+import type { CardClosingAction } from "../server/card-closing-state";
 import { resolveReadyForReviewTitle } from "../server/review-request-detail";
 
 /**
@@ -36,6 +37,8 @@ export interface ClineHubNotifyClient {
 		updateOnly?: boolean;
 		supersedesPrevious?: boolean;
 		awaitingAnswer?: boolean;
+		/** What can be done to close the card from where this is read. */
+		actions?: CardClosingAction[];
 	}): Promise<void>;
 	dispose(): Promise<void>;
 }
@@ -77,6 +80,11 @@ export interface ReadyForReviewNotification {
 	priority?: "high" | "medium" | "low";
 	/** The card is waiting on the person right now, so choices can be offered for it. */
 	awaitingAnswer?: boolean;
+	/**
+	 * What the person can do to close the card from where they read this: the step still missing
+	 * to get its work onto its base, and Concluir. Only on a card that is not asking.
+	 */
+	actions?: CardClosingAction[];
 }
 
 export interface CardProgressNotification extends ReadyForReviewNotification {
@@ -143,6 +151,7 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): C
 		awaitingAnswer?: boolean;
 		column?: string;
 		updateOnly?: boolean;
+		actions?: CardClosingAction[];
 	}): Promise<void> => {
 		let client: ClineHubNotifyClient | undefined;
 		try {
@@ -170,6 +179,7 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): C
 				...(payload.awaitingAnswer ? { awaitingAnswer: true } : {}),
 				...(payload.column ? { column: payload.column } : {}),
 				...(payload.updateOnly ? { updateOnly: true } : {}),
+				...(payload.actions && payload.actions.length > 0 ? { actions: payload.actions } : {}),
 			});
 		} catch {
 			// Deliberately silent: a notification that fails must never surface as a board
@@ -204,6 +214,7 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): C
 				workspacePath: notification.workspacePath,
 				awaitingAnswer: notification.awaitingAnswer,
 				column: notification.column,
+				actions: notification.actions,
 				// Never supersedes: this one asks the person for something, so it has to arrive
 				// on its own instead of quietly replacing a status line.
 			});

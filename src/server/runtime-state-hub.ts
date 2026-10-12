@@ -26,6 +26,7 @@ import type {
 } from "../core/api-contract";
 import { resolveTaskTitle } from "../core/task-title";
 import type { TerminalSessionManager } from "../terminal/session-manager";
+import { buildCardClosingActions, canReceiveTaskInput, resolveCardClosingState } from "./card-closing-state";
 import { type CardProgressState, resolveCardProgress } from "./card-progress-notification";
 import { shouldNotifyTaskReadyForReview } from "./ready-for-review-notification";
 import { describeReviewRequest, isAwaitingAnswer } from "./review-request-detail";
@@ -46,6 +47,8 @@ export interface CreateRuntimeStateHubDependencies {
 	>;
 	/** Overridable for tests; defaults to the real hub notifier. */
 	hubNotifier?: ClineHubNotifier;
+	/** Overridable for tests; defaults to reading the card's worktree and repository with git. */
+	resolveCardClosingState?: typeof resolveCardClosingState;
 }
 
 export interface RuntimeStateHub {
@@ -341,6 +344,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 	};
 
 	const hubNotifier = deps.hubNotifier ?? createClineHubNotifier();
+	const resolveClosingState = deps.resolveCardClosingState ?? resolveCardClosingState;
 
 	/**
 	 * Publishes "ready for review" to the Cline hub. Fire-and-forget by contract: it never
@@ -362,6 +366,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 		workspaceName: string;
 		priority?: RuntimeTaskPriority;
 		column?: RuntimeBoardColumnId;
+		baseRef?: string;
 	}> => {
 		let taskTitle = taskId;
 		let workspaceName = workspaceId;
@@ -370,6 +375,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 		// needs it to keep that message current: without it the only way to know a card moved
 		// is to read the board, which is the thing the person is away from.
 		let column: RuntimeBoardColumnId | undefined;
+		let baseRef: string | undefined;
 		if (workspacePath) {
 			try {
 				const snapshot = await deps.workspaceRegistry.buildWorkspaceStateSnapshot(workspaceId, workspacePath);
@@ -379,28 +385,44 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 					taskTitle = resolveTaskTitle(card.title, card.prompt);
 					priority = card.priority;
 					column = holder?.id;
+					baseRef = card.baseRef;
 				}
 				workspaceName = basename(workspacePath) || workspaceId;
 			} catch {
 				// Keep the fallbacks.
 			}
 		}
-		return { taskTitle, workspaceName, priority, column };
+		return { taskTitle, workspaceName, priority, column, baseRef };
 	};
 
 	const notifyHubTaskReadyForReview = async (
 		workspaceId: string,
 		workspacePath: string | null,
 		taskId: string,
+		session: Pick<RuntimeTaskSessionSummary, "workspacePath" | "agentId" | "pid">,
 		detail?: string,
 		awaitingAnswer?: boolean,
 	): Promise<void> => {
 		try {
-			const { taskTitle, workspaceName, priority, column } = await resolveCardIdentity(
+			const { taskTitle, workspaceName, priority, column, baseRef } = await resolveCardIdentity(
 				workspaceId,
 				workspacePath,
 				taskId,
 			);
+			// A card that is asking is offered its question's choices instead: a second set of
+			// buttons there would be two unrelated things to tap.
+			const actions =
+				!awaitingAnswer && workspacePath && baseRef
+					? buildCardClosingActions(
+							await resolveClosingState({
+								worktreePath: session.workspacePath,
+								repoPath: workspacePath,
+								baseRef,
+							}),
+							baseRef,
+							{ canIntegrate: canReceiveTaskInput(session) },
+						)
+					: undefined;
 			await hubNotifier.notifyReadyForReview({
 				taskId,
 				taskTitle,
@@ -410,6 +432,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 				priority,
 				awaitingAnswer,
 				column,
+				actions,
 			});
 		} catch {
 			// Notification is an accessory and must never surface as a board error.
@@ -488,6 +511,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 			workspaceId,
 			deps.workspaceRegistry.getWorkspacePathById(workspaceId),
 			summary.taskId,
+			summary,
 			describeReviewRequest(summary),
 			isAwaitingAnswer(summary),
 		);

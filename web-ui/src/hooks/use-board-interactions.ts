@@ -1,9 +1,9 @@
 import type { DropResult } from "@hello-pangea/dnd";
+import type { TaskGitAction } from "@runtime-task-git-action-prompt";
 import pLimit from "p-limit";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { notifyError, showAppToast } from "@/components/app-toaster";
-import type { TaskGitAction } from "@/git-actions/build-task-git-action-prompt";
 import { useLinkedBacklogTaskActions } from "@/hooks/use-linked-backlog-task-actions";
 import { useProgrammaticCardMoves } from "@/hooks/use-programmatic-card-moves";
 import { useReviewAutoActions } from "@/hooks/use-review-auto-actions";
