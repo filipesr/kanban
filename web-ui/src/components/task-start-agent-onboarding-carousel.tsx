@@ -1,18 +1,13 @@
 import * as RadixCheckbox from "@radix-ui/react-checkbox";
 import { getRuntimeAgentCatalogEntry } from "@runtime-agent-catalog";
 import { Check } from "lucide-react";
-import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactElement, useEffect, useMemo, useState } from "react";
 
 import { ClineSetupSection } from "@/components/shared/cline-setup-section";
 import { cn } from "@/components/ui/cn";
-import { useRuntimeSettingsClineController } from "@/hooks/use-runtime-settings-cline-controller";
+import type { OnboardingAgentSetup } from "@/hooks/use-onboarding-agent-setup";
 import { isClineProviderAuthenticated } from "@/runtime/native-agent";
-import type {
-	RuntimeAgentDefinition,
-	RuntimeAgentId,
-	RuntimeClineProviderSettings,
-	RuntimeConfigResponse,
-} from "@/runtime/types";
+import type { RuntimeAgentDefinition, RuntimeAgentId, RuntimeClineProviderSettings } from "@/runtime/types";
 
 interface BaseOnboardingSlide {
 	kind: "media" | "agent-selection";
@@ -34,16 +29,6 @@ interface MediaOnboardingSlide extends BaseOnboardingSlide {
 }
 
 type OnboardingSlide = BaseOnboardingSlide | MediaOnboardingSlide;
-
-interface AgentSelectionResult {
-	ok: boolean;
-	message?: string;
-}
-
-interface OnboardingDoneResult {
-	ok: boolean;
-	message?: string;
-}
 
 export const TASK_START_ONBOARDING_SLIDES: OnboardingSlide[] = [
 	{
@@ -326,45 +311,24 @@ function getInstallLinkLabel(agentId: RuntimeAgentId): string {
 
 export function TaskStartAgentOnboardingCarousel({
 	open,
-	workspaceId,
-	runtimeConfig,
-	selectedAgentId,
 	agents,
 	clineProviderSettings,
 	activeSlideIndex,
-	onSelectAgent,
+	agentSetup,
 	onClineSetupSaved,
-	onDoneActionChange,
 }: {
 	open: boolean;
-	workspaceId: string | null;
-	runtimeConfig: RuntimeConfigResponse | null;
-	selectedAgentId: RuntimeAgentId | null;
 	agents: RuntimeAgentDefinition[];
 	clineProviderSettings: RuntimeClineProviderSettings | null;
 	activeSlideIndex: number;
-	onSelectAgent?: (agentId: RuntimeAgentId) => Promise<AgentSelectionResult>;
+	agentSetup: OnboardingAgentSetup;
 	onClineSetupSaved?: () => void;
-	onDoneActionChange?: (action: (() => Promise<OnboardingDoneResult>) | null) => void;
 }): ReactElement {
-	const [activeAgentId, setActiveAgentId] = useState<RuntimeAgentId | null>(selectedAgentId);
-	const [selectionError, setSelectionError] = useState<string | null>(null);
-	const [clineSetupError, setClineSetupError] = useState<string | null>(null);
-	const selectionSavePromiseRef = useRef<Promise<AgentSelectionResult> | null>(null);
-
-	useEffect(() => {
-		setActiveAgentId(selectedAgentId);
-	}, [selectedAgentId]);
-
+	const { activeAgentId, selectionError, clineSetupError, setClineSetupError, clineSettings, selectAgent } =
+		agentSetup;
 	const currentSlide =
 		TASK_START_ONBOARDING_SLIDES[activeSlideIndex] ?? TASK_START_ONBOARDING_SLIDES[0] ?? FALLBACK_ONBOARDING_SLIDE;
 	const clineAuthenticated = isClineProviderAuthenticated(clineProviderSettings);
-	const clineSettings = useRuntimeSettingsClineController({
-		open,
-		workspaceId,
-		selectedAgentId: activeAgentId ?? selectedAgentId ?? "cline",
-		config: runtimeConfig,
-	});
 	const onboardingAgents = useMemo(
 		() =>
 			ONBOARDING_AGENT_IDS.map((agentId) => {
@@ -379,78 +343,6 @@ export function TaskStartAgentOnboardingCarousel({
 			}),
 		[agents],
 	);
-
-	const handleAgentSelect = (agentId: RuntimeAgentId) => {
-		if (activeAgentId === agentId) {
-			return;
-		}
-		setActiveAgentId(agentId);
-		setSelectionError(null);
-		if (!onSelectAgent) {
-			return;
-		}
-		const savePromise = onSelectAgent(agentId);
-		selectionSavePromiseRef.current = savePromise;
-		void savePromise
-			.then((result) => {
-				if (selectionSavePromiseRef.current !== savePromise) {
-					return;
-				}
-				if (!result.ok) {
-					setSelectionError(result.message ?? "Could not switch agents. Try again.");
-					setActiveAgentId(selectedAgentId);
-				}
-			})
-			.catch((error: unknown) => {
-				if (selectionSavePromiseRef.current !== savePromise) {
-					return;
-				}
-				const message = error instanceof Error ? error.message : String(error);
-				setSelectionError(message || "Could not switch agents. Try again.");
-				setActiveAgentId(selectedAgentId);
-			})
-			.finally(() => {
-				if (selectionSavePromiseRef.current === savePromise) {
-					selectionSavePromiseRef.current = null;
-				}
-			});
-	};
-
-	const handleDoneAction = useCallback(async (): Promise<OnboardingDoneResult> => {
-		if (selectionSavePromiseRef.current) {
-			const selectionResult = await selectionSavePromiseRef.current.catch((error: unknown) => ({
-				ok: false,
-				message: error instanceof Error ? error.message : String(error),
-			}));
-			if (!selectionResult.ok) {
-				const message = selectionResult.message ?? "Could not switch agents. Try again.";
-				setSelectionError(message);
-				return { ok: false, message };
-			}
-		}
-		if (activeAgentId !== "cline") {
-			return { ok: true };
-		}
-		if (!clineSettings.hasUnsavedChanges) {
-			return { ok: true };
-		}
-		setClineSetupError(null);
-		const saveResult = await clineSettings.saveProviderSettings();
-		if (!saveResult.ok) {
-			const message = saveResult.message ?? "Could not save Cline provider settings.";
-			setClineSetupError(message);
-			return { ok: false, message };
-		}
-		onClineSetupSaved?.();
-		return { ok: true };
-	}, [activeAgentId, clineSettings, onClineSetupSaved]);
-
-	useEffect(() => {
-		onDoneActionChange?.(handleDoneAction);
-		return () => {
-			onDoneActionChange?.(null);
-		};
-	}, [handleDoneAction, onDoneActionChange]);
 
 	return (
 		<div className="space-y-3">
@@ -496,11 +388,11 @@ export function TaskStartAgentOnboardingCarousel({
 							<div
 								role="button"
 								tabIndex={0}
-								onClick={() => handleAgentSelect(agent.id)}
+								onClick={() => selectAgent(agent.id)}
 								onKeyDown={(event) => {
 									if (event.key === "Enter" || event.key === " ") {
 										event.preventDefault();
-										handleAgentSelect(agent.id);
+										selectAgent(agent.id);
 									}
 								}}
 								className="flex cursor-pointer items-center justify-between gap-3"
@@ -510,7 +402,7 @@ export function TaskStartAgentOnboardingCarousel({
 										checked={activeAgentId === agent.id}
 										onCheckedChange={(checked) => {
 											if (checked === true) {
-												handleAgentSelect(agent.id);
+												selectAgent(agent.id);
 											}
 										}}
 										className="flex h-4 w-4 cursor-pointer items-center justify-center rounded border border-border-bright bg-surface-2 data-[state=checked]:bg-accent data-[state=checked]:border-accent"

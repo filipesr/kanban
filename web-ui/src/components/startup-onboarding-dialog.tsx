@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, Circle, CircleDot } from "lucide-react";
-import { type ReactElement, useCallback, useEffect, useState } from "react";
+import { type ReactElement, useEffect, useState } from "react";
 
 import {
 	TASK_START_ONBOARDING_SLIDES,
@@ -7,6 +7,7 @@ import {
 } from "@/components/task-start-agent-onboarding-carousel";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from "@/components/ui/dialog";
+import { type OnboardingAgentSetupResult, useOnboardingAgentSetup } from "@/hooks/use-onboarding-agent-setup";
 import type {
 	RuntimeAgentDefinition,
 	RuntimeAgentId,
@@ -30,16 +31,13 @@ export function StartupOnboardingDialog({
 	selectedAgentId?: RuntimeAgentId | null;
 	agents?: RuntimeAgentDefinition[];
 	clineProviderSettings?: RuntimeClineProviderSettings | null;
-	onSelectAgent?: (agentId: RuntimeAgentId) => Promise<{ ok: boolean; message?: string }>;
+	onSelectAgent?: (agentId: RuntimeAgentId) => Promise<OnboardingAgentSetupResult>;
 	workspaceId?: string | null;
 	runtimeConfig?: RuntimeConfigResponse | null;
 	onClineSetupSaved?: () => void;
 }): ReactElement {
 	const [onboardingSlideIndex, setOnboardingSlideIndex] = useState(0);
 	const [isCompletingOnboarding, setIsCompletingOnboarding] = useState(false);
-	const [onboardingDoneAction, setOnboardingDoneAction] = useState<
-		(() => Promise<{ ok: boolean; message?: string }>) | null
-	>(null);
 	const onboardingSlideCount = TASK_START_ONBOARDING_SLIDES.length;
 	const isFirstOnboardingSlide = onboardingSlideIndex === 0;
 	const isLastOnboardingSlide = onboardingSlideIndex === onboardingSlideCount - 1;
@@ -50,17 +48,18 @@ export function StartupOnboardingDialog({
 		}
 		setOnboardingSlideIndex(0);
 		setIsCompletingOnboarding(false);
-		setOnboardingDoneAction(null);
 	}, [open]);
 
-	const handleOnboardingDoneActionChange = useCallback(
-		(action: (() => Promise<{ ok: boolean; message?: string }>) | null) => {
-			setOnboardingDoneAction(() => action);
-		},
-		[],
-	);
+	const agentSetup = useOnboardingAgentSetup({
+		open,
+		workspaceId: workspaceId ?? null,
+		runtimeConfig: runtimeConfig ?? null,
+		selectedAgentId: selectedAgentId ?? null,
+		onSelectAgent,
+		onClineSetupSaved,
+	});
 
-	const handleAdvanceOnboarding = useCallback(() => {
+	const handleAdvanceOnboarding = () => {
 		if (!isLastOnboardingSlide) {
 			setOnboardingSlideIndex((current) => Math.min(current + 1, onboardingSlideCount - 1));
 			return;
@@ -68,7 +67,7 @@ export function StartupOnboardingDialog({
 		void (async () => {
 			setIsCompletingOnboarding(true);
 			try {
-				const result = onboardingDoneAction ? await onboardingDoneAction() : { ok: true };
+				const result = await agentSetup.completeAgentSetup();
 				if (result.ok) {
 					onClose();
 				}
@@ -76,7 +75,7 @@ export function StartupOnboardingDialog({
 				setIsCompletingOnboarding(false);
 			}
 		})();
-	}, [isLastOnboardingSlide, onboardingDoneAction, onClose, onboardingSlideCount]);
+	};
 
 	return (
 		<Dialog
@@ -89,15 +88,11 @@ export function StartupOnboardingDialog({
 			<DialogBody className="px-4 pt-2 pb-4">
 				<TaskStartAgentOnboardingCarousel
 					open={open}
-					workspaceId={workspaceId ?? null}
-					runtimeConfig={runtimeConfig ?? null}
-					selectedAgentId={selectedAgentId ?? null}
 					agents={agents ?? []}
 					clineProviderSettings={clineProviderSettings ?? null}
 					activeSlideIndex={onboardingSlideIndex}
-					onSelectAgent={onSelectAgent}
+					agentSetup={agentSetup}
 					onClineSetupSaved={onClineSetupSaved}
-					onDoneActionChange={handleOnboardingDoneActionChange}
 				/>
 			</DialogBody>
 			<DialogFooter>
