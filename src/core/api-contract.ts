@@ -279,6 +279,11 @@ export const runtimeTaskHookActivitySchema = z.object({
 	hookEventName: z.string().nullable().default(null),
 	notificationType: z.string().nullable().default(null),
 	source: z.string().nullable().default(null),
+	/**
+	 * What the person chose, on the hook that completes a question. Not carried forward to the
+	 * next hook: it says what settled this question, and the next activity is something else.
+	 */
+	answer: z.string().nullable().optional(),
 });
 export type RuntimeTaskHookActivity = z.infer<typeof runtimeTaskHookActivitySchema>;
 

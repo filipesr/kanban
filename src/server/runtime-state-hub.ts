@@ -523,6 +523,48 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 	};
 
 	/**
+	 * A card that was waiting on the person and is running again was answered -- at its own
+	 * terminal, or from a chat. Either way a question still offered elsewhere has to stop asking:
+	 * answered at the terminal, it kept its buttons on the phone and said nothing about being
+	 * settled. Announced for every answer; a subscriber that already closed the question (it
+	 * carried the answer itself) has nothing left to do.
+	 */
+	const handleQuestionAnswered = (
+		workspaceId: string,
+		previousSummary: RuntimeTaskSessionSummary | undefined,
+		summary: RuntimeTaskSessionSummary,
+	): void => {
+		if (
+			previousSummary?.state !== "awaiting_review" ||
+			summary.state !== "running" ||
+			isHomeAgentSessionId(summary.taskId)
+		) {
+			return;
+		}
+		const workspacePath = deps.workspaceRegistry.getWorkspacePathById(workspaceId);
+		const answer = summary.latestHookActivity?.answer ?? undefined;
+		void (async () => {
+			try {
+				const { taskTitle, workspaceName, column } = await resolveCardIdentity(
+					workspaceId,
+					workspacePath,
+					summary.taskId,
+				);
+				await hubNotifier.notifyQuestionAnswered({
+					taskId: summary.taskId,
+					taskTitle,
+					workspaceName,
+					workspacePath: workspacePath ?? undefined,
+					column,
+					answer,
+				});
+			} catch {
+				// Notification is an accessory and must never surface as a board error.
+			}
+		})();
+	};
+
+	/**
 	 * A running card saying what it is doing. Separate from the transition above because this
 	 * one supersedes itself: it is a status line, not an interruption.
 	 */
@@ -738,6 +780,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 				previousSummariesByTaskId.set(summary.taskId, summary);
 				queueTaskSessionSummaryBroadcast(workspaceId, summary);
 				handleTaskSessionSummaryTransition(workspaceId, previousSummary, summary);
+				handleQuestionAnswered(workspaceId, previousSummary, summary);
 				handleCardProgress(workspaceId, summary);
 			});
 			terminalSummaryUnsubscribeByWorkspaceId.set(workspaceId, unsubscribe);
@@ -763,6 +806,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 					void broadcastRuntimeWorkspaceStateUpdated(workspaceId, workspacePath);
 				}
 				handleTaskSessionSummaryTransition(workspaceId, previousSummary, summary);
+				handleQuestionAnswered(workspaceId, previousSummary, summary);
 				handleCardProgress(workspaceId, summary);
 			});
 			clineSummaryUnsubscribeByWorkspaceId.set(workspaceId, unsubscribe);

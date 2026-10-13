@@ -39,6 +39,8 @@ export interface ClineHubNotifyClient {
 		awaitingAnswer?: boolean;
 		/** What can be done to close the card from where this is read. */
 		actions?: CardClosingAction[];
+		/** The question the card was waiting on is settled; `answer` is what was chosen, if known. */
+		answered?: { answer?: string };
 	}): Promise<void>;
 	dispose(): Promise<void>;
 }
@@ -87,6 +89,11 @@ export interface ReadyForReviewNotification {
 	actions?: CardClosingAction[];
 }
 
+export interface QuestionAnsweredNotification extends ReadyForReviewNotification {
+	/** What was chosen, when the agent said. A permission prompt does not. */
+	answer?: string;
+}
+
 export interface CardProgressNotification extends ReadyForReviewNotification {
 	/** What the card is doing right now, as a person would read it on a phone. */
 	activity: string;
@@ -131,6 +138,7 @@ export interface ClineHubNotifier {
 	notifyReadyForReview(notification: ReadyForReviewNotification): Promise<void>;
 	notifyCardMoved(notification: ReadyForReviewNotification): Promise<void>;
 	notifyCardProgress(notification: CardProgressNotification): Promise<void>;
+	notifyQuestionAnswered(notification: QuestionAnsweredNotification): Promise<void>;
 }
 
 export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): ClineHubNotifier {
@@ -152,6 +160,7 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): C
 		column?: string;
 		updateOnly?: boolean;
 		actions?: CardClosingAction[];
+		answered?: { answer?: string };
 	}): Promise<void> => {
 		let client: ClineHubNotifyClient | undefined;
 		try {
@@ -180,6 +189,7 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): C
 				...(payload.column ? { column: payload.column } : {}),
 				...(payload.updateOnly ? { updateOnly: true } : {}),
 				...(payload.actions && payload.actions.length > 0 ? { actions: payload.actions } : {}),
+				...(payload.answered ? { answered: payload.answered } : {}),
 			});
 		} catch {
 			// Deliberately silent: a notification that fails must never surface as a board
@@ -242,6 +252,21 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): C
 				workspacePath: notification.workspacePath,
 				supersedesPrevious: true,
 				column: notification.column,
+			});
+		},
+		notifyQuestionAnswered(notification: QuestionAnsweredNotification): Promise<void> {
+			return publish({
+				// Shaped as a status-line update on purpose: a subscriber that does not know
+				// `answered` keeps the card's message current and posts nothing new, which is what
+				// an answer given at the terminal should cost a chat that never asked.
+				title: notification.taskTitle,
+				body: `${notification.workspaceName} · Running`,
+				taskId: notification.taskId,
+				workspacePath: notification.workspacePath,
+				supersedesPrevious: true,
+				updateOnly: true,
+				column: notification.column,
+				answered: notification.answer ? { answer: notification.answer } : {},
 			});
 		},
 	};

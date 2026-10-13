@@ -840,7 +840,8 @@ export class TerminalSessionManager implements TerminalSessionService {
 			typeof activity.finalMessage === "string" ||
 			typeof activity.hookEventName === "string" ||
 			typeof activity.notificationType === "string" ||
-			typeof activity.source === "string";
+			typeof activity.source === "string" ||
+			typeof activity.answer === "string";
 		if (!hasActivityUpdate) {
 			return cloneSummary(entry.summary);
 		}
@@ -863,6 +864,8 @@ export class TerminalSessionManager implements TerminalSessionService {
 					? activity.notificationType
 					: (previous?.notificationType ?? null),
 			source: typeof activity.source === "string" ? activity.source : (previous?.source ?? null),
+			// Not inherited: an answer belongs to the hook that settled its question.
+			answer: typeof activity.answer === "string" ? activity.answer : null,
 		};
 
 		const didChange =
@@ -872,7 +875,8 @@ export class TerminalSessionManager implements TerminalSessionService {
 			next.finalMessage !== (previous?.finalMessage ?? null) ||
 			next.hookEventName !== (previous?.hookEventName ?? null) ||
 			next.notificationType !== (previous?.notificationType ?? null) ||
-			next.source !== (previous?.source ?? null);
+			next.source !== (previous?.source ?? null) ||
+			next.answer !== (previous?.answer ?? null);
 		if (!didChange) {
 			return cloneSummary(entry.summary);
 		}

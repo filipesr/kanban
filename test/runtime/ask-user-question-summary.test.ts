@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { summarizeAskUserQuestion } from "../../src/core/ask-user-question-summary";
+import { readAskUserQuestionAnswer, summarizeAskUserQuestion } from "../../src/core/ask-user-question-summary";
 
 describe("summarizeAskUserQuestion", () => {
 	it("numbers the options, because the number is the answer", () => {
@@ -65,5 +65,30 @@ describe("summarizeAskUserQuestion", () => {
 		});
 		expect(summary).toContain("6) op5");
 		expect(summary).not.toContain("7) op6");
+	});
+});
+
+describe("readAskUserQuestionAnswer", () => {
+	const questions = [{ question: "Qual cor você prefere?", options: [{ label: "Azul" }, { label: "Verde" }] }];
+
+	it("reads what was chosen for the question the notice showed", () => {
+		// Answered in the card's terminal, the question on the phone still had live buttons and no
+		// sign it was settled. What was chosen is in the tool's response, keyed by the question.
+		expect(readAskUserQuestionAnswer({ questions, answers: { "Qual cor você prefere?": "Verde" } })).toBe("Verde");
+	});
+
+	it("answers for the first question, the one the notice showed", () => {
+		expect(
+			readAskUserQuestionAnswer({
+				questions: [...questions, { question: "E o tamanho?" }],
+				answers: { "E o tamanho?": "Grande", "Qual cor você prefere?": "Azul" },
+			}),
+		).toBe("Azul");
+	});
+
+	it("says nothing for a response it does not recognize", () => {
+		expect(readAskUserQuestionAnswer({ answers: {} })).toBeUndefined();
+		expect(readAskUserQuestionAnswer({ output: "ok" })).toBeUndefined();
+		expect(readAskUserQuestionAnswer(null)).toBeUndefined();
 	});
 });

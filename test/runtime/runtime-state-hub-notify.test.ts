@@ -68,8 +68,18 @@ function harness(
 			column?: string;
 		}) => Promise<void>
 	>(async () => undefined);
+	const notifyQuestionAnswered = vi.fn<
+		(notification: {
+			taskId: string;
+			taskTitle: string;
+			workspaceName: string;
+			workspacePath?: string;
+			column?: string;
+			answer?: string;
+		}) => Promise<void>
+	>(async () => undefined);
 	const hub = createRuntimeStateHub({
-		hubNotifier: { notifyReadyForReview, notifyCardProgress, notifyCardMoved },
+		hubNotifier: { notifyReadyForReview, notifyCardProgress, notifyCardMoved, notifyQuestionAnswered },
 		resolveCardClosingState: async () => options.closing ?? { next: null, unintegratedCommits: 0 },
 		workspaceRegistry: {
 			getWorkspacePathById: () => REPO,
@@ -99,6 +109,7 @@ function harness(
 		notifyReadyForReview,
 		notifyCardProgress,
 		notifyCardMoved,
+		notifyQuestionAnswered,
 		emit: (s: RuntimeTaskSessionSummary) => emit(s),
 	};
 }
@@ -364,5 +375,54 @@ describe("closing a finished card from the conversation", () => {
 		await vi.waitFor(() => expect(h.notifyReadyForReview).toHaveBeenCalledTimes(1));
 		expect(h.notifyReadyForReview.mock.calls[0]?.[0]?.awaitingAnswer).toBe(true);
 		expect(h.notifyReadyForReview.mock.calls[0]?.[0]?.actions).toBeUndefined();
+	});
+});
+
+describe("a question answered in the card's own terminal", () => {
+	const answered = (answer?: string) =>
+		summary({
+			state: "running",
+			latestHookActivity: {
+				activityText: "Completed AskUserQuestion: Gravar?",
+				toolName: "AskUserQuestion",
+				toolInputSummary: null,
+				finalMessage: null,
+				hookEventName: "PostToolUse",
+				notificationType: null,
+				source: "claude",
+				answer,
+			},
+		});
+
+	it("tells the hub, with what was chosen, so the question elsewhere stops asking", async () => {
+		// Reported from use: answered at the terminal, the question on the phone kept its buttons
+		// and said nothing about being settled, so it could still be tapped.
+		const h = harness();
+		h.emit(summary({ state: "running" }));
+		h.emit(summary({ state: "awaiting_review", reviewReason: "hook" }));
+		h.emit(answered("Descartar"));
+		await vi.waitFor(() => expect(h.notifyQuestionAnswered).toHaveBeenCalledTimes(1));
+		const sent = h.notifyQuestionAnswered.mock.calls[0]?.[0];
+		expect(sent?.taskId).toBe("461e5");
+		expect(sent?.answer).toBe("Descartar");
+		expect(sent?.workspacePath).toBe(REPO);
+	});
+
+	it("still tells the hub when what was chosen is not known", async () => {
+		// A permission prompt says nothing about which option was taken, but it was settled.
+		const h = harness();
+		h.emit(summary({ state: "running" }));
+		h.emit(summary({ state: "awaiting_review", reviewReason: "hook" }));
+		h.emit(answered());
+		await vi.waitFor(() => expect(h.notifyQuestionAnswered).toHaveBeenCalledTimes(1));
+		expect(h.notifyQuestionAnswered.mock.calls[0]?.[0].answer).toBeUndefined();
+	});
+
+	it("says nothing for a card that was never waiting", async () => {
+		const h = harness();
+		h.emit(summary({ state: "idle" }));
+		h.emit(answered("Descartar"));
+		await vi.waitFor(() => expect(h.notifyCardProgress).toHaveBeenCalled());
+		expect(h.notifyQuestionAnswered).not.toHaveBeenCalled();
 	});
 });

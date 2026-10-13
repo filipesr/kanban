@@ -578,6 +578,7 @@ export function parseHookIngestRequest(value: unknown): RuntimeHookIngestRequest
 				hookEventName: parsed.metadata.hookEventName?.trim(),
 				notificationType: parsed.metadata.notificationType?.trim(),
 				source: parsed.metadata.source?.trim(),
+				answer: parsed.metadata.answer?.trim(),
 			}
 		: undefined;
 	return {

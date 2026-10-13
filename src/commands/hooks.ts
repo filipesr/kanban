@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { createTRPCProxyClient, httpBatchLink, TRPCClientError } from "@trpc/client";
 import type { Command } from "commander";
 import type { RuntimeHookEvent, RuntimeTaskHookActivity } from "../core/api-contract";
-import { summarizeAskUserQuestion } from "../core/ask-user-question-summary";
+import { readAskUserQuestionAnswer, summarizeAskUserQuestion } from "../core/ask-user-question-summary";
 import { buildKanbanCommandParts } from "../core/kanban-command";
 import { buildKanbanRuntimeUrl, getRuntimeFetch } from "../core/runtime-endpoint";
 import { buildWindowsCmdArgsArray, resolveWindowsComSpec, shouldUseWindowsCmdLaunch } from "../core/windows-cmd-launch";
@@ -355,6 +355,12 @@ export function normalizeHookMetadata(
 		: null;
 
 	const activityText = inferActivityText(event, payload, toolName, finalMessage, notificationType);
+	// Only a completed question has an answer to read. Carried so the question can be shown as
+	// settled wherever else it was asked -- a phone that still offers its buttons otherwise.
+	const answer =
+		payload && hookEventName?.toLowerCase() === "posttooluse"
+			? readAskUserQuestionAnswer(asRecord(payload.tool_response) ?? asRecord(payload.toolResponse))
+			: undefined;
 	const merged: Partial<RuntimeTaskHookActivity> = {
 		source: flagMetadata.source ?? inferredSource ?? null,
 		hookEventName: flagMetadata.hookEventName ?? hookEventName ?? null,
@@ -362,6 +368,7 @@ export function normalizeHookMetadata(
 		notificationType: flagMetadata.notificationType ?? notificationType ?? null,
 		finalMessage: flagMetadata.finalMessage ?? finalMessage,
 		activityText: flagMetadata.activityText ?? (activityText ? normalizeWhitespace(activityText) : null),
+		...(answer ? { answer: normalizeWhitespace(answer) } : {}),
 	};
 
 	const hasValue = Object.values(merged).some((value) => typeof value === "string" && value.trim().length > 0);

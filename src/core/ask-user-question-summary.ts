@@ -41,6 +41,26 @@ function readOptions(value: unknown): string[] {
 }
 
 /**
+ * What was chosen, read off the tool's response once the question completes. Only the first
+ * question's answer: it is the one `summarizeAskUserQuestion` showed, so it is the one a reader
+ * elsewhere is waiting to see settled.
+ */
+export function readAskUserQuestionAnswer(
+	toolResponse: Record<string, unknown> | null | undefined,
+): string | undefined {
+	const answers = toolResponse?.answers;
+	if (!answers || typeof answers !== "object" || Array.isArray(answers)) {
+		return undefined;
+	}
+	const byQuestion = answers as Record<string, unknown>;
+	const first = Array.isArray(toolResponse?.questions)
+		? readString((toolResponse.questions[0] as Record<string, unknown> | undefined)?.question)
+		: undefined;
+	const answer = (first ? byQuestion[first] : undefined) ?? Object.values(byQuestion)[0];
+	return readString(answer);
+}
+
+/**
  * Accepts both shapes the tool is seen with: a `questions` array, and a single question at the
  * top level. A shape we do not recognize returns nothing, so the caller keeps its own fallback
  * instead of showing a mangled guess.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { describeToolOperation } from "../../src/commands/hooks";
+import { describeToolOperation, normalizeHookMetadata } from "../../src/commands/hooks";
 
 describe("describeToolOperation", () => {
 	it("carries the question and its numbered options", () => {
@@ -29,5 +29,30 @@ describe("describeToolOperation", () => {
 	it("says nothing without a tool or an input", () => {
 		expect(describeToolOperation(null, { command: "ls" })).toBeNull();
 		expect(describeToolOperation("Bash", null)).toBeNull();
+	});
+});
+
+describe("the answer to a question, read off the hook", () => {
+	const askUserQuestion = {
+		tool_name: "AskUserQuestion",
+		tool_input: { questions: [{ question: "Gravar?", options: [{ label: "Gravar" }, { label: "Descartar" }] }] },
+	};
+
+	it("carries what was chosen once the question completes", () => {
+		const metadata = normalizeHookMetadata(
+			"to_in_progress",
+			{
+				...askUserQuestion,
+				hook_event_name: "PostToolUse",
+				tool_response: { answers: { "Gravar?": "Descartar" } },
+			},
+			{},
+		);
+		expect(metadata?.answer).toBe("Descartar");
+	});
+
+	it("carries no answer while the question is still being asked", () => {
+		const metadata = normalizeHookMetadata("activity", { ...askUserQuestion, hook_event_name: "PreToolUse" }, {});
+		expect(metadata?.answer).toBeUndefined();
 	});
 });
