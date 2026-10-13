@@ -6,14 +6,12 @@ import type { RuntimeTaskSessionSummary } from "../core/api-contract";
  * Without this, "Ready for review" tells someone that a card wants them and nothing about what
  * it wants -- so the notification's only use is to send them to the board, which is the thing
  * they were not at. The agent's question is already on the summary; it just never travelled.
+ *
+ * Nothing here is cut to length. How much of a long text a chat can show, and how the rest
+ * reaches it, is the connector's call -- Telegram's sends anything long as a `.md` file and
+ * shows its end, where the conclusion or the question is. A cut made here first left that file
+ * holding only the opening, with the end it was meant to show already gone.
  */
-
-const DETAIL_MAX_LENGTH = 600;
-/**
- * A conclusion is read whole on a phone, where it is the point of the notice; 600 cut a usual
- * one mid-list. Telegram's own limit is 4096, so this leaves room for the title and the card.
- */
-const CONCLUSION_MAX_LENGTH = 1500;
 
 /** Hook events that mean the turn is over, whatever the agent did or did not say. */
 const COMPLETION_EVENTS = new Set(["posttooluse", "posttoolusefailure", "subagentstop", "stop"]);
@@ -41,19 +39,9 @@ export function isAwaitingAnswer(summary: RuntimeTaskSessionSummary): boolean {
 	return !COMPLETION_EVENTS.has(event);
 }
 
-function clipAt(value: string, maxLength: number): string {
-	if (value.length <= maxLength) {
-		return value;
-	}
-	const clipped = value.slice(0, maxLength);
-	const lastBreak = Math.max(clipped.lastIndexOf(" "), clipped.lastIndexOf("\n"));
-	const base = lastBreak > maxLength / 2 ? clipped.slice(0, lastBreak) : clipped;
-	return `${base.trimEnd()}…`;
-}
-
 /** Text read off the terminal, where line breaks are the TUI's wrapping, not the agent's. */
-function clip(value: string): string {
-	return clipAt(value.replace(/\s+/g, " ").trim(), DETAIL_MAX_LENGTH);
+function flattenTerminalText(value: string): string {
+	return value.replace(/\s+/g, " ").trim();
 }
 
 /**
@@ -62,8 +50,8 @@ function clip(value: string): string {
  * spaces, and more than one blank line in a row. Leading indentation stays: it is what nests a
  * list.
  */
-function clipConclusion(value: string): string {
-	const tidied = value
+function tidyConclusion(value: string): string {
+	return value
 		.split("\n")
 		.map((line) => {
 			const indent = line.match(/^[ \t]*/)?.[0] ?? "";
@@ -72,7 +60,6 @@ function clipConclusion(value: string): string {
 		.join("\n")
 		.replace(/\n{3,}/g, "\n\n")
 		.trim();
-	return clipAt(tidied, CONCLUSION_MAX_LENGTH);
 }
 
 /**
@@ -118,7 +105,7 @@ export function describeReviewRequest(summary: RuntimeTaskSessionSummary): strin
 	// said is more useful than "it died and here is what was launched".
 	const warning = summary.warningMessage?.trim();
 	if (warning) {
-		return clip(warning);
+		return flattenTerminalText(warning);
 	}
 	const awaiting = isAwaitingAnswer(summary);
 	// A card that is not asking has only one thing worth saying: what it concluded. Its current
@@ -131,7 +118,7 @@ export function describeReviewRequest(summary: RuntimeTaskSessionSummary): strin
 		return describeSilence(summary, awaiting);
 	}
 	if (!question) {
-		return clipConclusion(text);
+		return tidyConclusion(text);
 	}
 	// Naming the tool matters for a permission prompt: "may I run Bash" and "may I leave plan
 	// mode" are different enough decisions that the answer depends on which one it is.
@@ -141,7 +128,7 @@ export function describeReviewRequest(summary: RuntimeTaskSessionSummary): strin
 	// asking.
 	const alreadyNamed = tool ? new RegExp(`\\b${escapeForRegExp(tool)}\\b`).test(text) : false;
 	const prefix = awaiting && tool && !alreadyNamed ? `${tool}: ` : "";
-	return clip(`${prefix}${text}`);
+	return flattenTerminalText(`${prefix}${text}`);
 }
 
 /**

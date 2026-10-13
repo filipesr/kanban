@@ -105,15 +105,20 @@ describe("describeReviewRequest", () => {
 		expect(detail).toBe("Waiting for approval: Faço o push?");
 	});
 
-	it("clips a long answer at a word boundary", () => {
+	// How much of a long text fits a chat is the connector's call: Telegram's sends it as a file
+	// showing its end. Cut here first, that end never reached it.
+	it("carries a long conclusion whole, its end included", () => {
+		const conclusion = `${"palavra ".repeat(400)}fim`;
+		const detail = describeReviewRequest(summary({ latestHookActivity: activity({ finalMessage: conclusion }) }));
+		expect(detail).toBe(conclusion);
+	});
+
+	it("carries a long question whole, its end included", () => {
+		const question = `${"contexto ".repeat(150)}Faço o push?`;
 		const detail = describeReviewRequest(
-			summary({
-				latestHookActivity: activity({ finalMessage: `${"palavra ".repeat(400)}fim` }),
-			}),
+			summary({ latestHookActivity: activity({ hookEventName: "PermissionRequest", activityText: question }) }),
 		);
-		expect(detail?.endsWith("…")).toBe(true);
-		expect((detail ?? "").length).toBeLessThanOrEqual(1501);
-		expect(detail).not.toMatch(/\s…$/);
+		expect(detail).toBe(question);
 	});
 
 	it("carries a conclusion of a usual length whole", () => {
