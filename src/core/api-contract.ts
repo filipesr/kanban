@@ -338,6 +338,15 @@ export const runtimeWorkspaceStateConflictResponseSchema = z.object({
 });
 export type RuntimeWorkspaceStateConflictResponse = z.infer<typeof runtimeWorkspaceStateConflictResponseSchema>;
 
+export const runtimeWorkspaceStateNotifyRequestSchema = z.object({
+	/**
+	 * Cards the writer moved to another column. The runtime cannot tell on its own: the board was
+	 * written before it heard, so there is nothing left to compare against.
+	 */
+	movedTaskIds: z.array(z.string()).optional(),
+});
+export type RuntimeWorkspaceStateNotifyRequest = z.infer<typeof runtimeWorkspaceStateNotifyRequestSchema>;
+
 export const runtimeWorkspaceStateNotifyResponseSchema = z.object({
 	ok: z.boolean(),
 });

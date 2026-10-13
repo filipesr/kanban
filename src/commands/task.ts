@@ -15,6 +15,7 @@ import type {
 	RuntimeWorkspaceStateResponse,
 } from "../core/api-contract";
 import { runtimeAgentIdSchema, runtimeClineReasoningEffortSchema } from "../core/api-contract";
+import { diffCardColumns } from "../core/card-column-moves";
 import { buildKanbanRuntimeUrl, getKanbanRuntimeOrigin, getRuntimeFetch } from "../core/runtime-endpoint";
 import { normalizeTaskCategory, parseTaskPriorityOption, parseTaskTagList } from "../core/task-attributes";
 import {
@@ -31,7 +32,11 @@ import {
 import { buildTaskGitActionPrompt } from "../core/task-git-action-prompt";
 import { resolveProjectInputPath } from "../projects/project-path";
 import { buildCardClosingActions, canReceiveTaskInput, resolveCardClosingState } from "../server/card-closing-state";
-import { loadWorkspaceContext, mutateWorkspaceState } from "../state/workspace-state";
+import {
+	loadWorkspaceContext,
+	mutateWorkspaceState,
+	type RuntimeWorkspaceAtomicMutationResponse,
+} from "../state/workspace-state";
 import type { RuntimeAppRouter } from "../trpc/app-router";
 import { probeGitWorkspaceState } from "../workspace/git-sync";
 import { getTaskWorkspacePathInfo } from "../workspace/task-worktree";
@@ -303,8 +308,14 @@ async function ensureRuntimeWorkspace(workspaceRepoPath: string): Promise<string
 
 async function notifyRuntimeWorkspaceStateUpdated(
 	runtimeClient: ReturnType<typeof createRuntimeTrpcClient>,
+	mutation: Pick<RuntimeWorkspaceAtomicMutationResponse<unknown>, "previousBoard" | "state">,
 ): Promise<void> {
-	await runtimeClient.workspace.notifyStateUpdated.mutate().catch(() => null);
+	// The board is already written, so only this side can say which cards changed column -- and
+	// a card closed from a chat has a message there that must follow it to done.
+	const movedTaskIds = diffCardColumns(mutation.previousBoard, mutation.state.board).map((move) => move.taskId);
+	await runtimeClient.workspace.notifyStateUpdated
+		.mutate(movedTaskIds.length > 0 ? { movedTaskIds } : undefined)
+		.catch(() => null);
 }
 
 async function updateRuntimeWorkspaceState<T>(
@@ -321,7 +332,7 @@ async function updateRuntimeWorkspaceState<T>(
 	});
 
 	if (mutationResponse.saved) {
-		await notifyRuntimeWorkspaceStateUpdated(runtimeClient);
+		await notifyRuntimeWorkspaceStateUpdated(runtimeClient, mutationResponse);
 	}
 
 	return mutationResponse.value;
@@ -1121,7 +1132,7 @@ async function trashTaskById(input: {
 	});
 
 	if (mutation.saved) {
-		await notifyRuntimeWorkspaceStateUpdated(input.runtimeClient);
+		await notifyRuntimeWorkspaceStateUpdated(input.runtimeClient, mutation);
 	}
 
 	if (mutation.value.alreadyInTrash) {
@@ -1320,7 +1331,7 @@ async function deleteTaskCommand(input: {
 	});
 
 	if (mutation.saved) {
-		await notifyRuntimeWorkspaceStateUpdated(runtimeClient);
+		await notifyRuntimeWorkspaceStateUpdated(runtimeClient, mutation);
 	}
 
 	if (mutation.value.deletedTaskIds.length === 0) {

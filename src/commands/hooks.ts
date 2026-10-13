@@ -254,7 +254,10 @@ function inferActivityText(
 		return error ? `Tool failed: ${error}` : "Tool failed";
 	}
 	if (normalizedHookEvent === "permissionrequest") {
-		return "Waiting for approval";
+		// A question is shown through a permission request too, and this is the activity a card
+		// entering review is announced with. "Waiting for approval" there left the phone with
+		// nothing to read and no options to answer with.
+		return summarizeAskUserQuestion(toolInput) && toolOperation ? toolOperation : "Waiting for approval";
 	}
 	if (normalizedHookEvent === "userpromptsubmit" || normalizedHookEvent === "beforeagent") {
 		return "Resumed after user input";

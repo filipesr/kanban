@@ -695,6 +695,8 @@ export interface RuntimeWorkspaceAtomicMutationResult<T> {
 export interface RuntimeWorkspaceAtomicMutationResponse<T> {
 	value: T;
 	state: RuntimeWorkspaceStateResponse;
+	/** The board as it was before this mutation, so a caller can tell which cards it moved. */
+	previousBoard: RuntimeBoardData;
 	saved: boolean;
 }
 
@@ -714,6 +716,7 @@ export async function mutateWorkspaceState<T>(
 			return {
 				value: mutation.value,
 				state: currentState,
+				previousBoard: currentBoard,
 				saved: false,
 			};
 		}
@@ -739,6 +742,7 @@ export async function mutateWorkspaceState<T>(
 		return {
 			value: mutation.value,
 			state: toWorkspaceStateResponse(context, nextBoard, nextSessions, nextRevision),
+			previousBoard: currentBoard,
 			saved: true,
 		};
 	});

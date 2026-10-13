@@ -56,3 +56,32 @@ describe("the answer to a question, read off the hook", () => {
 		expect(metadata?.answer).toBeUndefined();
 	});
 });
+
+describe("a question that needs the person's permission to be shown", () => {
+	it("keeps the question and its options, not a bare request for approval", () => {
+		// Entering review stores this hook's activity before the card is announced. Reduced to
+		// "Waiting for approval", the question reached the phone with nothing to read and no
+		// options to turn into buttons -- and with no buttons, nothing to close once answered.
+		const metadata = normalizeHookMetadata(
+			"to_review",
+			{
+				hook_event_name: "PermissionRequest",
+				tool_name: "AskUserQuestion",
+				tool_input: {
+					questions: [{ question: "Gravar?", options: [{ label: "Gravar" }, { label: "Descartar" }] }],
+				},
+			},
+			{},
+		);
+		expect(metadata?.activityText).toBe("AskUserQuestion: Gravar? — 1) Gravar 2) Descartar");
+	});
+
+	it("still waits for approval on any other tool", () => {
+		const metadata = normalizeHookMetadata(
+			"to_review",
+			{ hook_event_name: "PermissionRequest", tool_name: "Bash", tool_input: { command: "rm -rf dist" } },
+			{},
+		);
+		expect(metadata?.activityText).toBe("Waiting for approval");
+	});
+});

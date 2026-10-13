@@ -356,7 +356,11 @@ export function createWorkspaceApi(deps: CreateWorkspaceApiDependencies): Runtim
 		loadState: async (workspaceScope) => {
 			return await deps.buildWorkspaceStateSnapshot(workspaceScope.workspaceId, workspaceScope.workspacePath);
 		},
-		notifyStateUpdated: async (workspaceScope) => {
+		notifyStateUpdated: async (workspaceScope, input) => {
+			// A move made by the CLI is only known to the CLI: it wrote the board before saying so.
+			for (const taskId of input?.movedTaskIds ?? []) {
+				void deps.notifyHubCardMoved?.(workspaceScope.workspaceId, workspaceScope.workspacePath, taskId);
+			}
 			void deps.broadcastRuntimeWorkspaceStateUpdated(workspaceScope.workspaceId, workspaceScope.workspacePath);
 			void deps.broadcastRuntimeProjectsUpdated(workspaceScope.workspaceId);
 			return {

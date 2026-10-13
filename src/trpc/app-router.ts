@@ -88,6 +88,7 @@ import type {
 	RuntimeWorkspaceChangesResponse,
 	RuntimeWorkspaceFileSearchRequest,
 	RuntimeWorkspaceFileSearchResponse,
+	RuntimeWorkspaceStateNotifyRequest,
 	RuntimeWorkspaceStateNotifyResponse,
 	RuntimeWorkspaceStateResponse,
 	RuntimeWorkspaceStateSaveRequest,
@@ -179,6 +180,7 @@ import {
 	runtimeWorkspaceChangesResponseSchema,
 	runtimeWorkspaceFileSearchRequestSchema,
 	runtimeWorkspaceFileSearchResponseSchema,
+	runtimeWorkspaceStateNotifyRequestSchema,
 	runtimeWorkspaceStateNotifyResponseSchema,
 	runtimeWorkspaceStateResponseSchema,
 	runtimeWorkspaceStateSaveRequestSchema,
@@ -335,7 +337,10 @@ export interface RuntimeTrpcContext {
 			input: RuntimeWorkspaceFileSearchRequest,
 		) => Promise<RuntimeWorkspaceFileSearchResponse>;
 		loadState: (scope: RuntimeTrpcWorkspaceScope) => Promise<RuntimeWorkspaceStateResponse>;
-		notifyStateUpdated: (scope: RuntimeTrpcWorkspaceScope) => Promise<RuntimeWorkspaceStateNotifyResponse>;
+		notifyStateUpdated: (
+			scope: RuntimeTrpcWorkspaceScope,
+			input?: RuntimeWorkspaceStateNotifyRequest,
+		) => Promise<RuntimeWorkspaceStateNotifyResponse>;
 		saveState: (
 			scope: RuntimeTrpcWorkspaceScope,
 			input: RuntimeWorkspaceStateSaveRequest,
@@ -658,9 +663,10 @@ export const runtimeAppRouter = t.router({
 			return await ctx.workspaceApi.loadState(ctx.workspaceScope);
 		}),
 		notifyStateUpdated: workspaceProcedure
+			.input(runtimeWorkspaceStateNotifyRequestSchema.optional())
 			.output(runtimeWorkspaceStateNotifyResponseSchema)
-			.mutation(async ({ ctx }) => {
-				return await ctx.workspaceApi.notifyStateUpdated(ctx.workspaceScope);
+			.mutation(async ({ ctx, input }) => {
+				return await ctx.workspaceApi.notifyStateUpdated(ctx.workspaceScope, input);
 			}),
 		saveState: workspaceProcedure
 			.input(runtimeWorkspaceStateSaveRequestSchema)

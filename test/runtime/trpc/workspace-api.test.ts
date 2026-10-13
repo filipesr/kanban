@@ -325,3 +325,43 @@ describe("createWorkspaceApi loadChanges", () => {
 		expect(workspaceChangesMocks.getWorkspaceChanges).not.toHaveBeenCalled();
 	});
 });
+
+describe("createWorkspaceApi notifyStateUpdated", () => {
+	it("announces each card the CLI moved, so a chat showing it follows", async () => {
+		// The board's Concluir runs `kanban task done`, which writes the board itself and only
+		// tells the runtime afterwards. Nothing announced the move, so the card's message on the
+		// phone kept the review dot after the card was done.
+		const notifyHubCardMoved = vi.fn(async () => {});
+		const api = createWorkspaceApi({
+			ensureTerminalManagerForWorkspace: vi.fn(),
+			getScopedClineTaskSessionService: vi.fn(),
+			broadcastRuntimeWorkspaceStateUpdated: vi.fn(),
+			broadcastRuntimeProjectsUpdated: vi.fn(),
+			buildWorkspaceStateSnapshot: vi.fn(),
+			notifyHubCardMoved,
+		});
+
+		await api.notifyStateUpdated(
+			{ workspaceId: "workspace-1", workspacePath: "/tmp/repo" },
+			{ movedTaskIds: ["52cf6"] },
+		);
+
+		expect(notifyHubCardMoved).toHaveBeenCalledWith("workspace-1", "/tmp/repo", "52cf6");
+	});
+
+	it("announces nothing when no card moved", async () => {
+		const notifyHubCardMoved = vi.fn(async () => {});
+		const api = createWorkspaceApi({
+			ensureTerminalManagerForWorkspace: vi.fn(),
+			getScopedClineTaskSessionService: vi.fn(),
+			broadcastRuntimeWorkspaceStateUpdated: vi.fn(),
+			broadcastRuntimeProjectsUpdated: vi.fn(),
+			buildWorkspaceStateSnapshot: vi.fn(),
+			notifyHubCardMoved,
+		});
+
+		await api.notifyStateUpdated({ workspaceId: "workspace-1", workspacePath: "/tmp/repo" });
+
+		expect(notifyHubCardMoved).not.toHaveBeenCalled();
+	});
+});
