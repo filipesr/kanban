@@ -284,6 +284,12 @@ export const runtimeTaskHookActivitySchema = z.object({
 	 * next hook: it says what settled this question, and the next activity is something else.
 	 */
 	answer: z.string().nullable().optional(),
+	/**
+	 * Absolute paths of the pictures a question points at, resolved where the agent runs. Set by
+	 * the hook that asks, and kept exactly as long as the `activityText` it came with: a picture
+	 * belongs to the question it illustrates, so a new activity text without pictures clears them.
+	 */
+	images: z.array(z.string()).optional(),
 });
 export type RuntimeTaskHookActivity = z.infer<typeof runtimeTaskHookActivitySchema>;
 

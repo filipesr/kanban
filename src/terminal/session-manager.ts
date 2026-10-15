@@ -127,6 +127,14 @@ function createDefaultSummary(taskId: string): RuntimeTaskSessionSummary {
 	};
 }
 
+function resolveNextHookImages(
+	activity: Partial<RuntimeTaskHookActivity>,
+	previous: RuntimeTaskHookActivity | null | undefined,
+): Pick<RuntimeTaskHookActivity, "images"> {
+	const images = typeof activity.activityText === "string" ? activity.images : (activity.images ?? previous?.images);
+	return images && images.length > 0 ? { images: [...images] } : {};
+}
+
 function cloneSummary(summary: RuntimeTaskSessionSummary): RuntimeTaskSessionSummary {
 	return {
 		...summary,
@@ -841,7 +849,8 @@ export class TerminalSessionManager implements TerminalSessionService {
 			typeof activity.hookEventName === "string" ||
 			typeof activity.notificationType === "string" ||
 			typeof activity.source === "string" ||
-			typeof activity.answer === "string";
+			typeof activity.answer === "string" ||
+			Array.isArray(activity.images);
 		if (!hasActivityUpdate) {
 			return cloneSummary(entry.summary);
 		}
@@ -866,6 +875,9 @@ export class TerminalSessionManager implements TerminalSessionService {
 			source: typeof activity.source === "string" ? activity.source : (previous?.source ?? null),
 			// Not inherited: an answer belongs to the hook that settled its question.
 			answer: typeof activity.answer === "string" ? activity.answer : null,
+			// Tied to the text, not to the hook: a hook that leaves the question's text in place
+			// leaves its pictures too, and one that replaces the text takes them away with it.
+			...resolveNextHookImages(activity, previous),
 		};
 
 		const didChange =
@@ -876,7 +888,8 @@ export class TerminalSessionManager implements TerminalSessionService {
 			next.hookEventName !== (previous?.hookEventName ?? null) ||
 			next.notificationType !== (previous?.notificationType ?? null) ||
 			next.source !== (previous?.source ?? null) ||
-			next.answer !== (previous?.answer ?? null);
+			next.answer !== (previous?.answer ?? null) ||
+			(next.images ?? []).join("\n") !== (previous?.images ?? []).join("\n");
 		if (!didChange) {
 			return cloneSummary(entry.summary);
 		}

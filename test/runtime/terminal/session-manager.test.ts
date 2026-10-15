@@ -69,6 +69,26 @@ describe("TerminalSessionManager", () => {
 		expect(typeof updated?.lastHookAt).toBe("number");
 	});
 
+	it("keeps a question's pictures exactly as long as its text", () => {
+		// A hook that only says the prompt is up (a Notification) leaves the question in place,
+		// and its pictures with it; the next activity replaces both.
+		const manager = new TerminalSessionManager();
+		manager.hydrateFromRecord({
+			"task-1": createSummary({ state: "running" }),
+		});
+
+		manager.applyHookActivity("task-1", {
+			activityText: "AskUserQuestion: Aprovar? — 1) Aprovar",
+			hookEventName: "PermissionRequest",
+			images: ["/w/final/01.jpg"],
+		});
+		const kept = manager.applyHookActivity("task-1", { notificationType: "permission_prompt" });
+		expect(kept?.latestHookActivity?.images).toEqual(["/w/final/01.jpg"]);
+
+		const replaced = manager.applyHookActivity("task-1", { activityText: "Using Read", hookEventName: "PreToolUse" });
+		expect(replaced?.latestHookActivity?.images).toBeUndefined();
+	});
+
 	it("resets stale running sessions without active processes", () => {
 		const manager = new TerminalSessionManager();
 		manager.hydrateFromRecord({

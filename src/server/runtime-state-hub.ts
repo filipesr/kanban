@@ -430,6 +430,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 		session: Pick<RuntimeTaskSessionSummary, "workspacePath" | "agentId" | "pid">,
 		detail?: string,
 		awaitingAnswer?: boolean,
+		images?: string[],
 	): Promise<void> => {
 		try {
 			const { taskTitle, workspaceName, priority, column, baseRef } = await resolveCardIdentity(
@@ -461,6 +462,9 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 				awaitingAnswer,
 				column,
 				actions,
+				// The pictures a question points at are part of what it asks. A card that is not
+				// asking has no question for them to illustrate.
+				...(awaitingAnswer && images && images.length > 0 ? { images } : {}),
 			});
 		} catch {
 			// Notification is an accessory and must never surface as a board error.
@@ -546,6 +550,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 			summary,
 			describeReviewRequest(summary),
 			isAwaitingAnswer(summary),
+			summary.latestHookActivity?.images,
 		);
 	};
 

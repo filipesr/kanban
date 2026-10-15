@@ -128,6 +128,11 @@ export function describeReviewRequest(summary: RuntimeTaskSessionSummary): strin
 	// asking.
 	const alreadyNamed = tool ? new RegExp(`\\b${escapeForRegExp(tool)}\\b`).test(text) : false;
 	const prefix = awaiting && tool && !alreadyNamed ? `${tool}: ` : "";
+	// A question with pictures is the one whose line breaks are the agent's own: it carries the
+	// caption being approved, and a caption run into one line is not the one that gets posted.
+	if (activity?.images && activity.images.length > 0) {
+		return tidyConclusion(`${prefix}${text}`);
+	}
 	return flattenTerminalText(`${prefix}${text}`);
 }
 

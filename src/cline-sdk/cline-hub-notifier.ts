@@ -40,6 +40,12 @@ export interface ClineHubNotifyClient {
 		actions?: CardClosingAction[];
 		/** The question the card was waiting on is settled; `answer` is what was chosen, if known. */
 		answered?: { answer?: string };
+		/**
+		 * Absolute local paths of the pictures the question points at, in display order, at most
+		 * 10. Not in @clinebot/core's type yet: the hub forwards payloads verbatim, so it reaches
+		 * subscribers all the same.
+		 */
+		images?: string[];
 	}): Promise<void>;
 	dispose(): Promise<void>;
 }
@@ -86,6 +92,11 @@ export interface ReadyForReviewNotification {
 	 * to get its work onto its base, and Concluir. Only on a card that is not asking.
 	 */
 	actions?: CardClosingAction[];
+	/**
+	 * Absolute paths of the pictures the question points at -- the draft a card asks to approve.
+	 * Only with `awaitingAnswer`: a picture without its question is just a picture.
+	 */
+	images?: string[];
 }
 
 export interface QuestionAnsweredNotification extends ReadyForReviewNotification {
@@ -160,6 +171,7 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): C
 		updateOnly?: boolean;
 		actions?: CardClosingAction[];
 		answered?: { answer?: string };
+		images?: string[];
 	}): Promise<void> => {
 		let client: ClineHubNotifyClient | undefined;
 		try {
@@ -189,6 +201,7 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): C
 				...(payload.updateOnly ? { updateOnly: true } : {}),
 				...(payload.actions && payload.actions.length > 0 ? { actions: payload.actions } : {}),
 				...(payload.answered ? { answered: payload.answered } : {}),
+				...(payload.images && payload.images.length > 0 ? { images: payload.images.slice(0, 10) } : {}),
 			});
 		} catch {
 			// Deliberately silent: a notification that fails must never surface as a board
@@ -224,6 +237,7 @@ export function createClineHubNotifier(options: ClineHubNotifierOptions = {}): C
 				awaitingAnswer: notification.awaitingAnswer,
 				column: notification.column,
 				actions: notification.actions,
+				images: notification.awaitingAnswer ? notification.images : undefined,
 				// Never supersedes: this one asks the person for something, so it has to arrive
 				// on its own instead of quietly replacing a status line.
 			});

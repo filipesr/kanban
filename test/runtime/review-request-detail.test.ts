@@ -343,3 +343,34 @@ describe("a question asked in the turn after a conclusion", () => {
 		expect(describeReviewRequest(asking)).not.toContain("O merge está feito");
 	});
 });
+
+describe("a question with pictures in the notice", () => {
+	it("keeps its line breaks: it carries the caption being approved", () => {
+		expect(
+			describeReviewRequest(
+				summary({
+					latestHookActivity: activity({
+						activityText: "AskUserQuestion: Aprovar?\n\nLegenda:\nLinha 1\nLinha 2 — 1) Aprovar 2) Descartar",
+						toolName: "AskUserQuestion",
+						hookEventName: "PermissionRequest",
+						images: ["/code/app/final/01.jpg"],
+					}),
+				}),
+			),
+		).toBe("AskUserQuestion: Aprovar?\n\nLegenda:\nLinha 1\nLinha 2 — 1) Aprovar 2) Descartar");
+	});
+
+	it("still flattens a question without them", () => {
+		expect(
+			describeReviewRequest(
+				summary({
+					latestHookActivity: activity({
+						activityText: "AskUserQuestion: Gravar?\nAgora? — 1) Sim",
+						toolName: "AskUserQuestion",
+						hookEventName: "PermissionRequest",
+					}),
+				}),
+			),
+		).toBe("AskUserQuestion: Gravar? Agora? — 1) Sim");
+	});
+});

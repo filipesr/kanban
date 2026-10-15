@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { describeToolOperation, normalizeHookMetadata } from "../../src/commands/hooks";
 
@@ -83,5 +86,67 @@ describe("a question that needs the person's permission to be shown", () => {
 			{},
 		);
 		expect(metadata?.activityText).toBe("Waiting for approval");
+	});
+});
+
+describe("a question that points at pictures", () => {
+	const DRAFT = "marketing/instagram/projects/x/posts/2026-10-22-y/final/01.jpg";
+	let worktree: string;
+
+	beforeEach(() => {
+		worktree = mkdtempSync(join(tmpdir(), "kanban-hook-images-"));
+		mkdirSync(join(worktree, DRAFT, ".."), { recursive: true });
+		writeFileSync(join(worktree, DRAFT), "");
+	});
+
+	afterEach(() => {
+		rmSync(worktree, { recursive: true, force: true });
+	});
+
+	const approval = (hookEventName: string, question = `Aprovar este rascunho? ![](${DRAFT})`) => ({
+		hook_event_name: hookEventName,
+		tool_name: "AskUserQuestion",
+		cwd: worktree,
+		tool_input: {
+			questions: [{ question, options: [{ label: "Aprovar" }, { label: "Pedir ajuste" }, { label: "Descartar" }] }],
+		},
+	});
+
+	it("carries them as absolute paths, resolved against the card's worktree", () => {
+		// The hook is the only place that knows the agent's cwd: the board and the hub run
+		// elsewhere and would resolve a relative path against the wrong directory.
+		const metadata = normalizeHookMetadata("to_review", approval("PermissionRequest"), {});
+		expect(metadata?.images).toEqual([join(worktree, DRAFT)]);
+		expect(metadata?.activityText).toBe(
+			"AskUserQuestion: Aprovar este rascunho? — 1) Aprovar 2) Pedir ajuste 3) Descartar",
+		);
+	});
+
+	it("carries them on the hook that shows the question too", () => {
+		expect(normalizeHookMetadata("activity", approval("PreToolUse"), {})?.images).toEqual([join(worktree, DRAFT)]);
+	});
+
+	it("does not carry them once the question completed", () => {
+		expect(normalizeHookMetadata("to_in_progress", approval("PostToolUse"), {})?.images).toBeUndefined();
+	});
+
+	it("keeps the caption's line breaks, collapsing only spaces and extra blank lines", () => {
+		const metadata = normalizeHookMetadata(
+			"to_review",
+			approval(
+				"PermissionRequest",
+				`Aprovar o post E02?\n\n\n\nLegenda:\nPrimeira   linha\nSegunda\n\n![](${DRAFT})`,
+			),
+			{},
+		);
+		expect(metadata?.activityText).toBe(
+			"AskUserQuestion: Aprovar o post E02?\n\nLegenda:\nPrimeira linha\nSegunda — 1) Aprovar 2) Pedir ajuste 3) Descartar",
+		);
+	});
+
+	it("leaves a question without pictures in one line, as before", () => {
+		const metadata = normalizeHookMetadata("to_review", approval("PermissionRequest", "Gravar?\nAgora?"), {});
+		expect(metadata?.activityText).toBe("AskUserQuestion: Gravar? Agora? — 1) Aprovar 2) Pedir ajuste 3) Descartar");
+		expect(metadata?.images).toBeUndefined();
 	});
 });

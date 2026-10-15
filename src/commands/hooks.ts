@@ -4,7 +4,13 @@ import { join } from "node:path";
 import { createTRPCProxyClient, httpBatchLink, TRPCClientError } from "@trpc/client";
 import type { Command } from "commander";
 import type { RuntimeHookEvent, RuntimeTaskHookActivity } from "../core/api-contract";
-import { readAskUserQuestionAnswer, summarizeAskUserQuestion } from "../core/ask-user-question-summary";
+import {
+	readAskUserQuestionAnswer,
+	readAskUserQuestionImageRefs,
+	resolveAskUserQuestionImages,
+	summarizeAskUserQuestion,
+	tidyQuestionText,
+} from "../core/ask-user-question-summary";
 import { buildKanbanCommandParts } from "../core/kanban-command";
 import { buildKanbanRuntimeUrl, getRuntimeFetch } from "../core/runtime-endpoint";
 import { buildWindowsCmdArgsArray, resolveWindowsComSpec, shouldUseWindowsCmdLaunch } from "../core/windows-cmd-launch";
@@ -364,14 +370,32 @@ export function normalizeHookMetadata(
 		payload && hookEventName?.toLowerCase() === "posttooluse"
 			? readAskUserQuestionAnswer(asRecord(payload.tool_response) ?? asRecord(payload.toolResponse))
 			: undefined;
+	// Only the hooks that ask carry the question's pictures: a completed question is settled, and
+	// sending its pictures again with the answer would read as being asked twice.
+	const normalizedHookEvent = hookEventName?.toLowerCase() ?? "";
+	const asksQuestion =
+		normalizedHookEvent === "pretooluse" ||
+		normalizedHookEvent === "beforetool" ||
+		normalizedHookEvent === "permissionrequest";
+	const toolInput = payload ? extractToolInput(payload) : null;
+	const isQuestion = Boolean(toolInput && summarizeAskUserQuestion(toolInput));
+	const images =
+		isQuestion && asksQuestion
+			? resolveAskUserQuestionImages(toolInput, typeof payload?.cwd === "string" ? payload.cwd : null)
+			: [];
+	// A question with pictures keeps its line breaks: it carries the text being approved -- a
+	// caption's paragraphs -- and flattened into one line that text is not what was approved.
+	const keepsLines = isQuestion && readAskUserQuestionImageRefs(toolInput).length > 0;
+	const tidyActivity = keepsLines ? tidyQuestionText : normalizeWhitespace;
 	const merged: Partial<RuntimeTaskHookActivity> = {
 		source: flagMetadata.source ?? inferredSource ?? null,
 		hookEventName: flagMetadata.hookEventName ?? hookEventName ?? null,
 		toolName: flagMetadata.toolName ?? toolName ?? null,
 		notificationType: flagMetadata.notificationType ?? notificationType ?? null,
 		finalMessage: flagMetadata.finalMessage ?? finalMessage,
-		activityText: flagMetadata.activityText ?? (activityText ? normalizeWhitespace(activityText) : null),
+		activityText: flagMetadata.activityText ?? (activityText ? tidyActivity(activityText) : null),
 		...(answer ? { answer: normalizeWhitespace(answer) } : {}),
+		...(images.length > 0 ? { images } : {}),
 	};
 
 	const hasValue = Object.values(merged).some((value) => typeof value === "string" && value.trim().length > 0);

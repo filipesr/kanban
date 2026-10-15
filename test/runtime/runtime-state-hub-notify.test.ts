@@ -47,6 +47,7 @@ function harness(
 			awaitingAnswer?: boolean;
 			column?: string;
 			actions?: Array<{ id: string; label: string; confirm?: string }>;
+			images?: string[];
 		}) => Promise<void>
 	>(async () => undefined);
 	const notifyCardProgress = vi.fn<
@@ -375,6 +376,53 @@ describe("closing a finished card from the conversation", () => {
 		await vi.waitFor(() => expect(h.notifyReadyForReview).toHaveBeenCalledTimes(1));
 		expect(h.notifyReadyForReview.mock.calls[0]?.[0]?.awaitingAnswer).toBe(true);
 		expect(h.notifyReadyForReview.mock.calls[0]?.[0]?.actions).toBeUndefined();
+	});
+});
+
+describe("the pictures a question points at", () => {
+	const asking = (patch: Record<string, unknown>) =>
+		summary({
+			state: "awaiting_review",
+			reviewReason: "hook",
+			latestHookActivity: {
+				activityText: "AskUserQuestion: Aprovar este rascunho? — 1) Aprovar 2) Pedir ajuste 3) Descartar",
+				toolName: "AskUserQuestion",
+				toolInputSummary: null,
+				finalMessage: null,
+				hookEventName: "PermissionRequest",
+				notificationType: null,
+				source: "claude",
+				images: ["/w/final/01.jpg", "/w/final/02.jpg"],
+				...patch,
+			},
+		});
+
+	it("travel with the question to the hub", async () => {
+		const h = harness();
+		h.emit(summary({ state: "running" }));
+		h.emit(asking({}));
+		await vi.waitFor(() => expect(h.notifyReadyForReview).toHaveBeenCalledTimes(1));
+		expect(h.notifyReadyForReview.mock.calls[0]?.[0]?.images).toEqual(["/w/final/01.jpg", "/w/final/02.jpg"]);
+	});
+
+	it("keep the caption's line breaks in what the question says", async () => {
+		const h = harness();
+		h.emit(summary({ state: "running" }));
+		h.emit(asking({ activityText: "AskUserQuestion: Aprovar?\n\nLegenda:\nLinha 1\nLinha 2 — 1) Aprovar" }));
+		await vi.waitFor(() => expect(h.notifyReadyForReview).toHaveBeenCalledTimes(1));
+		expect(h.notifyReadyForReview.mock.calls[0]?.[0]?.detail).toBe(
+			"AskUserQuestion: Aprovar?\n\nLegenda:\nLinha 1\nLinha 2 — 1) Aprovar",
+		);
+	});
+
+	it("stay behind once the card is no longer asking", async () => {
+		// The question was answered and the agent concluded: a picture without its question is
+		// just a picture.
+		const h = harness();
+		h.emit(summary({ state: "running" }));
+		h.emit(asking({ hookEventName: "Stop", finalMessage: "Publicado." }));
+		await vi.waitFor(() => expect(h.notifyReadyForReview).toHaveBeenCalledTimes(1));
+		expect(h.notifyReadyForReview.mock.calls[0]?.[0]?.images).toBeUndefined();
 	});
 });
 

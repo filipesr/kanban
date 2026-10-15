@@ -219,4 +219,69 @@ describe("priority in the review notice", () => {
 			],
 		});
 	});
+
+	it("carries a question's pictures in the payload, so the chat shows them with the buttons", async () => {
+		const sendNotify = vi.fn(async (_payload: Record<string, unknown>) => undefined);
+		const notifier = createClineHubNotifier({
+			isEnabled: async () => true,
+			readDiscovery: async () => ({ url: "ws://127.0.0.1:1/hub", authToken: "tok" }),
+			createClient: () => ({ connect: async () => undefined, sendNotify, dispose: async () => undefined }),
+		});
+		await notifier.notifyReadyForReview({
+			taskId: "52609",
+			taskTitle: "Post E02",
+			workspaceName: "partyshare",
+			detail: "AskUserQuestion: Aprovar este rascunho? — 1) Aprovar 2) Pedir ajuste 3) Descartar",
+			awaitingAnswer: true,
+			images: ["/w/final/01.jpg", "/w/final/02.jpg"],
+		});
+		expect(sendNotify.mock.calls[0]?.[0]).toMatchObject({
+			awaitingAnswer: true,
+			images: ["/w/final/01.jpg", "/w/final/02.jpg"],
+		});
+	});
+
+	it("sends no pictures with a notice that is not asking, nor with progress", async () => {
+		const sendNotify = vi.fn(async (_payload: Record<string, unknown>) => undefined);
+		const notifier = createClineHubNotifier({
+			isEnabled: async () => true,
+			readDiscovery: async () => ({ url: "ws://127.0.0.1:1/hub", authToken: "tok" }),
+			createClient: () => ({ connect: async () => undefined, sendNotify, dispose: async () => undefined }),
+		});
+		await notifier.notifyReadyForReview({
+			taskId: "52609",
+			taskTitle: "Post E02",
+			workspaceName: "partyshare",
+			images: ["/w/final/01.jpg"],
+		});
+		await notifier.notifyCardProgress({
+			taskId: "52609",
+			taskTitle: "Post E02",
+			workspaceName: "partyshare",
+			activity: "Using Read",
+			images: ["/w/final/01.jpg"],
+		});
+		expect(sendNotify).toHaveBeenCalledTimes(2);
+		for (const [payload] of sendNotify.mock.calls) {
+			expect(payload).not.toHaveProperty("images");
+		}
+	});
+
+	it("keeps a question's line breaks in the body", async () => {
+		const sendNotify = vi.fn(async (_payload: Record<string, unknown>) => undefined);
+		const notifier = createClineHubNotifier({
+			isEnabled: async () => true,
+			readDiscovery: async () => ({ url: "ws://127.0.0.1:1/hub", authToken: "tok" }),
+			createClient: () => ({ connect: async () => undefined, sendNotify, dispose: async () => undefined }),
+		});
+		await notifier.notifyReadyForReview({
+			taskId: "52609",
+			taskTitle: "Post E02",
+			workspaceName: "partyshare",
+			detail: "AskUserQuestion: Aprovar?\n\nLegenda:\nLinha 1\nLinha 2 — 1) Aprovar",
+			awaitingAnswer: true,
+			images: ["/w/final/01.jpg"],
+		});
+		expect(sendNotify.mock.calls[0]?.[0]?.body).toContain("Legenda:\nLinha 1\nLinha 2");
+	});
 });
