@@ -1,10 +1,9 @@
-import { join } from "node:path";
-
-import { HubUIClient, readHubDiscovery, resolveClineDataDir } from "@clinebot/core";
+import { HubUIClient, resolveClineDataDir } from "@clinebot/core";
 import { resolveClineBuildEnv } from "@clinebot/shared";
 import { loadGlobalRuntimeConfig } from "../config/runtime-config";
 import type { CardClosingAction } from "../server/card-closing-state";
 import { resolveReadyForReviewTitle } from "../server/review-request-detail";
+import { findRunningHubDiscovery } from "./cline-hub-discovery";
 
 /**
  * Publishes "a card needs you" to the Cline hub, so any connected subscriber can deliver it.
@@ -111,10 +110,10 @@ async function defaultIsEnabled(): Promise<boolean> {
 
 async function defaultReadDiscovery(): Promise<ClineHubDiscoveryRecord | undefined> {
 	try {
-		// The discovery file is named after the build env, so a development hub and a production
-		// hub never read each other's token.
-		const path = join(resolveClineDataDir(), "locks", "hub", `${resolveClineBuildEnv()}.json`);
-		return (await readHubDiscovery(path)) ?? undefined;
+		return await findRunningHubDiscovery({
+			dataDir: resolveClineDataDir(),
+			buildEnv: resolveClineBuildEnv(),
+		});
 	} catch {
 		return undefined;
 	}
