@@ -368,6 +368,63 @@ export const runtimeProjectSummarySchema = z.object({
 });
 export type RuntimeProjectSummary = z.infer<typeof runtimeProjectSummarySchema>;
 
+/**
+ * What a card in the cross-project overview is waiting on. `awaiting_answer` is split out of the
+ * session's `awaiting_review` because a question blocks the card until someone replies, while a
+ * finished turn only waits to be read -- the overview exists mostly to surface the first kind.
+ */
+export const runtimeProjectsOverviewCardStatusSchema = z.enum([
+	"idle",
+	"running",
+	"awaiting_answer",
+	"awaiting_review",
+	"failed",
+	"interrupted",
+]);
+export type RuntimeProjectsOverviewCardStatus = z.infer<typeof runtimeProjectsOverviewCardStatusSchema>;
+
+export const runtimeProjectsOverviewProjectSchema = z.object({
+	id: z.string(),
+	name: z.string(),
+	path: z.string(),
+});
+export type RuntimeProjectsOverviewProject = z.infer<typeof runtimeProjectsOverviewProjectSchema>;
+
+export const runtimeProjectsOverviewCardSchema = z.object({
+	projectId: z.string(),
+	taskId: z.string(),
+	/** The column the card is effectively in, live session state applied (as in the project counts). */
+	column: runtimeBoardColumnIdEnum,
+	title: z.string(),
+	tags: z.array(z.string()),
+	category: z.string().nullable(),
+	priority: runtimeTaskPrioritySchema.nullable(),
+	source: z.string().nullable(),
+	agentId: runtimeAgentIdSchema.nullable(),
+	createdAt: z.number(),
+	updatedAt: z.number(),
+	/** Null when the card never had a session. */
+	status: runtimeProjectsOverviewCardStatusSchema.nullable(),
+	/** What the card is asking, when `status` is `awaiting_answer`. */
+	pendingQuestion: z.string().nullable(),
+	/** Its conclusion, failure, or current activity -- whatever explains `status` best. */
+	activityText: z.string().nullable(),
+	sessionUpdatedAt: z.number().nullable(),
+});
+export type RuntimeProjectsOverviewCard = z.infer<typeof runtimeProjectsOverviewCardSchema>;
+
+export const runtimeProjectsOverviewRequestSchema = z.object({
+	/** Limit the overview to these projects, to refresh only the ones that changed. Omit for all. */
+	projectIds: z.array(z.string()).optional(),
+});
+export type RuntimeProjectsOverviewRequest = z.infer<typeof runtimeProjectsOverviewRequestSchema>;
+
+export const runtimeProjectsOverviewResponseSchema = z.object({
+	projects: z.array(runtimeProjectsOverviewProjectSchema),
+	cards: z.array(runtimeProjectsOverviewCardSchema),
+});
+export type RuntimeProjectsOverviewResponse = z.infer<typeof runtimeProjectsOverviewResponseSchema>;
+
 export const runtimeTaskWorkspaceMetadataSchema = z.object({
 	taskId: z.string(),
 	path: z.string(),
@@ -478,6 +535,19 @@ export type RuntimeStateStreamClineSessionContextUpdatedMessage = z.infer<
 	typeof runtimeStateStreamClineSessionContextUpdatedMessageSchema
 >;
 
+/**
+ * Something in this project's board or sessions changed. Sent to every client, whatever project
+ * it is looking at, so a view spanning all projects knows which one to reload. Carries no state:
+ * clients that do not show the overview ignore it, and the ones that do fetch only what changed.
+ */
+export const runtimeStateStreamProjectsOverviewInvalidatedMessageSchema = z.object({
+	type: z.literal("projects_overview_invalidated"),
+	workspaceId: z.string(),
+});
+export type RuntimeStateStreamProjectsOverviewInvalidatedMessage = z.infer<
+	typeof runtimeStateStreamProjectsOverviewInvalidatedMessageSchema
+>;
+
 export const runtimeStateStreamErrorMessageSchema = z.object({
 	type: z.literal("error"),
 	message: z.string(),
@@ -495,6 +565,7 @@ export const runtimeStateStreamMessageSchema = z.discriminatedUnion("type", [
 	runtimeStateStreamTaskChatClearedMessageSchema,
 	runtimeStateStreamMcpAuthUpdatedMessageSchema,
 	runtimeStateStreamClineSessionContextUpdatedMessageSchema,
+	runtimeStateStreamProjectsOverviewInvalidatedMessageSchema,
 	runtimeStateStreamErrorMessageSchema,
 ]);
 export type RuntimeStateStreamMessage = z.infer<typeof runtimeStateStreamMessageSchema>;

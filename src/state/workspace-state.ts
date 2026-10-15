@@ -310,6 +310,12 @@ async function readWorkspaceSessions(workspaceId: string): Promise<Record<string
 	return parsePersistedStateFile(sessionsPath, SESSIONS_FILENAME, rawSessions, workspaceSessionsSchema, {});
 }
 
+export async function loadWorkspaceSessionsById(
+	workspaceId: string,
+): Promise<Record<string, RuntimeTaskSessionSummary>> {
+	return await readWorkspaceSessions(workspaceId);
+}
+
 async function readWorkspaceMeta(workspaceId: string): Promise<WorkspaceStateMeta> {
 	const metaPath = getWorkspaceMetaPath(workspaceId);
 	const rawMeta = await readJsonFile(metaPath);

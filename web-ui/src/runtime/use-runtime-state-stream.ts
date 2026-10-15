@@ -56,6 +56,7 @@ export interface UseRuntimeStateStreamResult {
 	latestTaskReadyForReview: RuntimeStateStreamTaskReadyForReviewMessage | null;
 	latestMcpAuthStatuses: RuntimeClineMcpServerAuthStatus[] | null;
 	clineSessionContextVersion: number;
+	overviewInvalidationVersions: Record<string, number>;
 	streamError: string | null;
 	isRuntimeDisconnected: boolean;
 	hasReceivedSnapshot: boolean;
@@ -71,6 +72,12 @@ interface RuntimeStateStreamStore {
 	latestTaskReadyForReview: RuntimeStateStreamTaskReadyForReviewMessage | null;
 	latestMcpAuthStatuses: RuntimeClineMcpServerAuthStatus[] | null;
 	clineSessionContextVersion: number;
+	/**
+	 * A counter per project, bumped each time the runtime says that project changed. A counter
+	 * rather than "the latest message" so two projects changing back to back are never folded
+	 * into one render and lost.
+	 */
+	overviewInvalidationVersions: Record<string, number>;
 	streamError: string | null;
 	isRuntimeDisconnected: boolean;
 	hasReceivedSnapshot: boolean;
@@ -93,6 +100,7 @@ type RuntimeStateStreamAction =
 	| { type: "cline_session_context_updated"; payload: RuntimeStateStreamClineSessionContextUpdatedMessage }
 	| { type: "workspace_state_updated"; workspaceState: RuntimeWorkspaceStateResponse }
 	| { type: "task_sessions_updated"; summaries: RuntimeTaskSessionSummary[] }
+	| { type: "projects_overview_invalidated"; workspaceId: string }
 	| { type: "stream_error"; message: string }
 	| { type: "stream_disconnected"; message: string };
 
@@ -107,6 +115,7 @@ function createInitialRuntimeStateStreamStore(requestedWorkspaceId: string | nul
 		latestTaskReadyForReview: null,
 		latestMcpAuthStatuses: null,
 		clineSessionContextVersion: 0,
+		overviewInvalidationVersions: {},
 		streamError: null,
 		isRuntimeDisconnected: false,
 		hasReceivedSnapshot: false,
@@ -191,6 +200,7 @@ function runtimeStateStreamReducer(
 			latestTaskReadyForReview: state.latestTaskReadyForReview,
 			latestMcpAuthStatuses: state.latestMcpAuthStatuses,
 			clineSessionContextVersion: action.payload.clineSessionContextVersion,
+			overviewInvalidationVersions: state.overviewInvalidationVersions,
 			streamError: null,
 			isRuntimeDisconnected: false,
 			hasReceivedSnapshot: true,
@@ -277,6 +287,15 @@ function runtimeStateStreamReducer(
 			workspaceState: {
 				...state.workspaceState,
 				sessions: mergeTaskSessionSummaries(state.workspaceState.sessions, action.summaries),
+			},
+		};
+	}
+	if (action.type === "projects_overview_invalidated") {
+		return {
+			...state,
+			overviewInvalidationVersions: {
+				...state.overviewInvalidationVersions,
+				[action.workspaceId]: (state.overviewInvalidationVersions[action.workspaceId] ?? 0) + 1,
 			},
 		};
 	}
@@ -459,6 +478,13 @@ export function useRuntimeStateStream(requestedWorkspaceId: string | null): UseR
 						});
 						return;
 					}
+					if (payload.type === "projects_overview_invalidated") {
+						dispatch({
+							type: "projects_overview_invalidated",
+							workspaceId: payload.workspaceId,
+						});
+						return;
+					}
 					if (payload.type === "error") {
 						dispatch({
 							type: "stream_error",
@@ -511,6 +537,7 @@ export function useRuntimeStateStream(requestedWorkspaceId: string | null): UseR
 		latestTaskReadyForReview: state.latestTaskReadyForReview,
 		latestMcpAuthStatuses: state.latestMcpAuthStatuses,
 		clineSessionContextVersion: state.clineSessionContextVersion,
+		overviewInvalidationVersions: state.overviewInvalidationVersions,
 		streamError: state.streamError,
 		isRuntimeDisconnected: state.isRuntimeDisconnected,
 		hasReceivedSnapshot: state.hasReceivedSnapshot,

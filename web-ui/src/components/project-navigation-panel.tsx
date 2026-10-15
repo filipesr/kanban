@@ -1,6 +1,6 @@
 import * as Collapsible from "@radix-ui/react-collapsible";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { ChevronDown, ChevronUp, Ellipsis, ExternalLink, Info, Lightbulb, Plus, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Ellipsis, ExternalLink, Info, LayoutGrid, Lightbulb, Plus, X } from "lucide-react";
 import { type MouseEvent as ReactMouseEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { canShowFeaturebaseFeedbackButton } from "@/components/featurebase-feedback-button";
 import { Button } from "@/components/ui/button";
@@ -49,6 +49,8 @@ export function ProjectNavigationPanel({
 	projects,
 	isLoadingProjects = false,
 	currentProjectId,
+	isOverviewActive = false,
+	onOpenOverview,
 	removingProjectId,
 	activeSection,
 	onActiveSectionChange,
@@ -68,6 +70,9 @@ export function ProjectNavigationPanel({
 	projects: RuntimeProjectSummary[];
 	isLoadingProjects?: boolean;
 	currentProjectId: string | null;
+	/** Whether the cross-project overview is the screen being shown. */
+	isOverviewActive?: boolean;
+	onOpenOverview?: () => void;
 	removingProjectId: string | null;
 	activeSection: "projects" | "agent";
 	onActiveSectionChange: (section: "projects" | "agent") => void;
@@ -222,6 +227,29 @@ export function ProjectNavigationPanel({
 						className="absolute top-0 right-0 bottom-0 w-1.5 cursor-ew-resize z-10"
 					/>
 				)}
+				{onOpenOverview && sortedProjects.length > 0 ? (
+					<button
+						type="button"
+						title="All projects"
+						aria-label="All projects"
+						aria-current={isOverviewActive ? "page" : undefined}
+						onClick={() => {
+							if (isMobile) {
+								setCollapsed(false);
+							}
+							onOpenOverview();
+						}}
+						className={cn(
+							"rounded-md shrink-0 border-0 cursor-pointer flex items-center justify-center",
+							isMobile ? "w-11 h-11" : "w-8 h-8",
+							isOverviewActive
+								? "bg-accent text-accent-fg"
+								: "bg-transparent text-text-secondary hover:text-text-primary hover:bg-surface-3",
+						)}
+					>
+						<LayoutGrid size={16} />
+					</button>
+				) : null}
 				{sortedProjects.map((project) => {
 					const isCurrent = currentProjectId === project.id;
 					const letter = project.name.charAt(0).toUpperCase();
@@ -357,6 +385,27 @@ export function ProjectNavigationPanel({
 									<ProjectRowSkeleton key={`project-skeleton-${index}`} />
 								))}
 							</div>
+						) : null}
+
+						{onOpenOverview && sortedProjects.length > 0 ? (
+							<button
+								type="button"
+								aria-current={isOverviewActive ? "page" : undefined}
+								className={cn(
+									"kb-project-row flex cursor-pointer items-center gap-1.5 rounded-md",
+									isOverviewActive ? "kb-project-row-selected text-accent-fg" : "text-text-primary",
+								)}
+								style={{ padding: "6px 8px" }}
+								onClick={() => {
+									onOpenOverview();
+									if (isMobile) {
+										setCollapsed(true);
+									}
+								}}
+							>
+								<LayoutGrid size={14} className="shrink-0" />
+								<span className="text-sm font-medium">All projects</span>
+							</button>
 						) : null}
 
 						{sortedProjects.map((project) => (

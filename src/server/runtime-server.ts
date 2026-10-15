@@ -12,7 +12,9 @@ import {
 import { createClineWatcherRegistry } from "../cline-sdk/cline-watcher-registry";
 import type {
 	RuntimeCommandRunResponse,
+	RuntimeProjectsOverviewRequest,
 	RuntimeRunUpdateResponse,
+	RuntimeTaskSessionSummary,
 	RuntimeUpdateStatusResponse,
 	RuntimeWorkspaceStateResponse,
 } from "../core/api-contract";
@@ -36,7 +38,12 @@ import {
 	validatePasscode,
 	validateSession,
 } from "../security/passcode-manager";
-import { loadWorkspaceContextById } from "../state/workspace-state";
+import {
+	listWorkspaceIndexEntries,
+	loadWorkspaceBoardById,
+	loadWorkspaceContextById,
+	loadWorkspaceSessionsById,
+} from "../state/workspace-state";
 import type { TerminalSessionManager } from "../terminal/session-manager";
 import { createTerminalWebSocketBridge } from "../terminal/ws-server";
 import { type RuntimeTrpcContext, type RuntimeTrpcWorkspaceScope, runtimeAppRouter } from "../trpc/app-router";
@@ -46,6 +53,7 @@ import { createRuntimeApi } from "../trpc/runtime-api";
 import { createWorkspaceApi } from "../trpc/workspace-api";
 import { getWebUiDir, normalizeRequestPath, readAsset } from "./assets";
 import { handleHttpRequest, handleSocketUpgrade } from "./middleware";
+import { buildProjectsOverview } from "./projects-overview";
 import type { RuntimeStateHub } from "./runtime-state-hub";
 import type { WorkspaceRegistry } from "./workspace-registry";
 
@@ -167,6 +175,21 @@ export async function createRuntimeServer(deps: CreateRuntimeServerDependencies)
 	const disposeClineTaskSessionService = (workspaceId: string): void => {
 		void disposeClineTaskSessionServiceAsync(workspaceId);
 	};
+	const listLiveTaskSessions = (workspaceId: string): RuntimeTaskSessionSummary[] => [
+		...(deps.workspaceRegistry.getTerminalManagerForWorkspace(workspaceId)?.listSummaries() ?? []),
+		...(clineTaskSessionServiceByWorkspaceId.get(workspaceId)?.listSummaries() ?? []),
+	];
+	const loadProjectsOverview = async (request: RuntimeProjectsOverviewRequest | undefined) =>
+		await buildProjectsOverview(
+			{
+				listProjects: listWorkspaceIndexEntries,
+				loadBoard: loadWorkspaceBoardById,
+				loadPersistedSessions: loadWorkspaceSessionsById,
+				listLiveSessions: listLiveTaskSessions,
+				warn: deps.warn,
+			},
+			request,
+		);
 	const prepareForStateReset = async (): Promise<void> => {
 		const workspaceIds = new Set<string>();
 		for (const { workspaceId } of deps.workspaceRegistry.listManagedWorkspaces()) {
@@ -239,6 +262,7 @@ export async function createRuntimeServer(deps: CreateRuntimeServerDependencies)
 				warn: deps.warn,
 				buildProjectsPayload: deps.workspaceRegistry.buildProjectsPayload,
 				pickDirectoryPathFromSystemDialog: deps.pickDirectoryPathFromSystemDialog,
+				buildProjectsOverview: loadProjectsOverview,
 				serverCwd: process.cwd(),
 			}),
 			hooksApi: createHooksApi({

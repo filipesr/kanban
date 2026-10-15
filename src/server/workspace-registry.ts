@@ -6,6 +6,7 @@ import type {
 	RuntimeProjectTaskCounts,
 	RuntimeWorkspaceStateResponse,
 } from "../core/api-contract";
+import { resolveLiveTaskColumn, resolveProjectName } from "../core/live-task-column";
 import {
 	listWorkspaceIndexEntries,
 	loadWorkspaceBoardById,
@@ -154,15 +155,12 @@ function applyLiveSessionStateToProjectTaskCounts(
 		if (!columnId) {
 			continue;
 		}
-		if (summary.state === "awaiting_review" && columnId === "in_progress") {
-			next.in_progress = Math.max(0, next.in_progress - 1);
-			next.review += 1;
+		const liveColumnId = resolveLiveTaskColumn(columnId, summary);
+		if (liveColumnId === columnId) {
 			continue;
 		}
-		if (summary.state === "interrupted" && columnId !== "trash") {
-			next[columnId] = Math.max(0, next[columnId] - 1);
-			next.trash += 1;
-		}
+		next[columnId] = Math.max(0, next[columnId] - 1);
+		next[liveColumnId] += 1;
 	}
 	return next;
 }
@@ -172,13 +170,10 @@ function toProjectSummary(project: {
 	repoPath: string;
 	taskCounts: RuntimeProjectTaskCounts;
 }): RuntimeProjectSummary {
-	const normalized = project.repoPath.replaceAll("\\", "/").replace(/\/+$/g, "");
-	const segments = normalized.split("/").filter((segment) => segment.length > 0);
-	const name = segments[segments.length - 1] ?? normalized;
 	return {
 		id: project.workspaceId,
 		path: project.repoPath,
-		name,
+		name: resolveProjectName(project.repoPath),
 		taskCounts: project.taskCounts,
 	};
 }

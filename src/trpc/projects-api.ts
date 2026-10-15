@@ -5,6 +5,8 @@ import type {
 	RuntimeDirectoryListResponse,
 	RuntimeProjectAddResponse,
 	RuntimeProjectSummary,
+	RuntimeProjectsOverviewRequest,
+	RuntimeProjectsOverviewResponse,
 	RuntimeProjectTaskCounts,
 } from "../core/api-contract";
 import { parseDirectoryListRequest, parseProjectAddRequest, parseProjectRemoveRequest } from "../core/api-validation";
@@ -55,6 +57,9 @@ export interface CreateProjectsApiDependencies {
 		projects: RuntimeProjectSummary[];
 	}>;
 	pickDirectoryPathFromSystemDialog: () => string | null;
+	buildProjectsOverview: (
+		request: RuntimeProjectsOverviewRequest | undefined,
+	) => Promise<RuntimeProjectsOverviewResponse>;
 	serverCwd: string;
 }
 
@@ -69,6 +74,7 @@ export function createProjectsApi(deps: CreateProjectsApiDependencies): RuntimeT
 				projects: payload.projects,
 			};
 		},
+		loadProjectsOverview: async (input) => await deps.buildProjectsOverview(input),
 		addProject: async (preferredWorkspaceId, input) => {
 			const body = parseProjectAddRequest(input);
 			const preferredWorkspaceContext = preferredWorkspaceId

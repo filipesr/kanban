@@ -47,6 +47,7 @@ function createDefaultDeps(serverCwd: string): CreateProjectsApiDependencies {
 		warn: vi.fn(),
 		buildProjectsPayload: vi.fn(async () => ({ currentProjectId: null, projects: [] })),
 		pickDirectoryPathFromSystemDialog: vi.fn(() => null),
+		buildProjectsOverview: vi.fn(async () => ({ projects: [], cards: [] })),
 		serverCwd,
 	};
 }

@@ -14,6 +14,7 @@ import { AgentTerminalPanel } from "@/components/detail-panels/agent-terminal-pa
 import { GitHistoryView } from "@/components/git-history-view";
 import { KanbanBoard } from "@/components/kanban-board";
 import { ProjectNavigationPanel } from "@/components/project-navigation-panel";
+import { ProjectsOverviewView } from "@/components/projects-overview/projects-overview-view";
 import { RuntimeSettingsDialog, type RuntimeSettingsSection } from "@/components/runtime-settings-dialog";
 import { StartupOnboardingDialog } from "@/components/startup-onboarding-dialog";
 import { TaskCreateDialog } from "@/components/task-create-dialog";
@@ -46,6 +47,7 @@ import { useKanbanAccessGate } from "@/hooks/use-kanban-access-gate";
 import { useOpenWorkspace } from "@/hooks/use-open-workspace";
 import { parseRemovedProjectPathFromStreamError, useProjectNavigation } from "@/hooks/use-project-navigation";
 import { useProjectUiState } from "@/hooks/use-project-ui-state";
+import { useProjectsOverviewNavigation } from "@/hooks/use-projects-overview-navigation";
 import { useReviewReadyNotifications } from "@/hooks/use-review-ready-notifications";
 import { useShortcutActions } from "@/hooks/use-shortcut-actions";
 import { useStartupOnboarding } from "@/hooks/use-startup-onboarding";
@@ -108,6 +110,7 @@ export default function App(): ReactElement {
 		latestTaskReadyForReview,
 		latestMcpAuthStatuses,
 		clineSessionContextVersion,
+		overviewInvalidationVersions,
 		streamError,
 		isRuntimeDisconnected,
 		hasReceivedSnapshot,
@@ -237,6 +240,15 @@ export default function App(): ReactElement {
 			setIsGitHistoryOpen(false);
 		},
 	});
+
+	const { isOverviewOpen, openOverview, closeOverview, openOverviewCard } = useProjectsOverviewNavigation({
+		currentProjectId,
+		board,
+		isBoardPending: isProjectSwitching || isAwaitingWorkspaceSnapshot || isWorkspaceMetadataPending,
+		selectProject: handleSelectProject,
+		openTask: setSelectedTaskId,
+	});
+	const overviewProjectIds = useMemo(() => projects.map((project) => project.id), [projects]);
 
 	useEffect(() => {
 		replaceWorkspaceMetadata(workspaceMetadata);
@@ -556,8 +568,9 @@ export default function App(): ReactElement {
 		if (hasNoProjects) {
 			return;
 		}
+		closeOverview();
 		setIsGitHistoryOpen((current) => !current);
-	}, [hasNoProjects]);
+	}, [closeOverview, hasNoProjects]);
 	const handleCloseGitHistory = useCallback(() => {
 		setIsGitHistoryOpen(false);
 	}, []);
@@ -814,7 +827,12 @@ export default function App(): ReactElement {
 					<ProjectNavigationPanel
 						projects={displayedProjects}
 						isLoadingProjects={isProjectListLoading}
-						currentProjectId={navigationCurrentProjectId}
+						currentProjectId={isOverviewOpen ? null : navigationCurrentProjectId}
+						isOverviewActive={isOverviewOpen}
+						onOpenOverview={() => {
+							setIsGitHistoryOpen(false);
+							openOverview();
+						}}
 						removingProjectId={removingProjectId}
 						activeSection={homeSidebarSection}
 						onActiveSectionChange={setHomeSidebarSection}
@@ -824,6 +842,7 @@ export default function App(): ReactElement {
 						clineProviderSettings={settingsRuntimeProjectConfig?.clineProviderSettings ?? null}
 						featurebaseFeedbackState={featurebaseFeedbackState}
 						onSelectProject={(projectId) => {
+							closeOverview();
 							void handleSelectProject(projectId);
 						}}
 						onRemoveProject={handleRemoveProject}
@@ -924,7 +943,15 @@ export default function App(): ReactElement {
 							) : (
 								<div className="flex flex-1 flex-col min-h-0 min-w-0">
 									<div className="flex flex-1 min-h-0 min-w-0">
-										{isGitHistoryOpen ? (
+										{isOverviewOpen ? (
+											<ProjectsOverviewView
+												invalidationVersions={overviewInvalidationVersions}
+												projectIds={overviewProjectIds}
+												onOpenCard={(card) => {
+													openOverviewCard(card.projectId, card.taskId);
+												}}
+											/>
+										) : isGitHistoryOpen ? (
 											<GitHistoryView
 												workspaceId={currentProjectId}
 												gitHistory={gitHistory}

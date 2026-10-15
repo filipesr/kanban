@@ -14,6 +14,7 @@ import type {
 	RuntimeStateStreamMcpAuthUpdatedMessage,
 	RuntimeStateStreamMessage,
 	RuntimeStateStreamProjectsMessage,
+	RuntimeStateStreamProjectsOverviewInvalidatedMessage,
 	RuntimeStateStreamSnapshotMessage,
 	RuntimeStateStreamTaskChatClearedMessage,
 	RuntimeStateStreamTaskChatMessage,
@@ -138,6 +139,24 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 		}
 	};
 
+	/**
+	 * Reaches every client, not only those scoped to the workspace: the cross-project overview
+	 * lives in a tab that is looking at some other project. Costs nothing per project -- no
+	 * snapshot is built here; a client showing the overview reloads just this project.
+	 */
+	const broadcastProjectsOverviewInvalidated = (workspaceId: string) => {
+		if (runtimeStateClients.size === 0) {
+			return;
+		}
+		const payload: RuntimeStateStreamProjectsOverviewInvalidatedMessage = {
+			type: "projects_overview_invalidated",
+			workspaceId,
+		};
+		for (const client of runtimeStateClients) {
+			sendRuntimeStateMessage(client, payload);
+		}
+	};
+
 	const broadcastClineMcpAuthStatusesUpdated = (statuses: RuntimeClineMcpServerAuthStatus[]) => {
 		if (runtimeStateClients.size === 0) {
 			return;
@@ -172,6 +191,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 		}
 		pendingTaskSessionSummariesByWorkspaceId.delete(workspaceId);
 		const summaries = Array.from(pending.values());
+		broadcastProjectsOverviewInvalidated(workspaceId);
 		const runtimeClients = runtimeStateClientsByWorkspaceId.get(workspaceId);
 		if (runtimeClients && runtimeClients.size > 0) {
 			const payload: RuntimeStateStreamTaskSessionsMessage = {
@@ -320,6 +340,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 	};
 
 	const broadcastRuntimeWorkspaceStateUpdated = async (workspaceId: string, workspacePath: string): Promise<void> => {
+		broadcastProjectsOverviewInvalidated(workspaceId);
 		const clients = runtimeStateClientsByWorkspaceId.get(workspaceId);
 		if (!clients || clients.size === 0) {
 			return;

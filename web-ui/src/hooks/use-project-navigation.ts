@@ -54,6 +54,7 @@ export interface UseProjectNavigationResult {
 	latestTaskReadyForReview: ReturnType<typeof useRuntimeStateStream>["latestTaskReadyForReview"];
 	latestMcpAuthStatuses: ReturnType<typeof useRuntimeStateStream>["latestMcpAuthStatuses"];
 	clineSessionContextVersion: ReturnType<typeof useRuntimeStateStream>["clineSessionContextVersion"];
+	overviewInvalidationVersions: ReturnType<typeof useRuntimeStateStream>["overviewInvalidationVersions"];
 	streamError: string | null;
 	isRuntimeDisconnected: boolean;
 	hasReceivedSnapshot: boolean;
@@ -88,6 +89,7 @@ export function useProjectNavigation({ onProjectSwitchStart }: UseProjectNavigat
 		latestTaskReadyForReview,
 		latestMcpAuthStatuses,
 		clineSessionContextVersion,
+		overviewInvalidationVersions,
 		streamError,
 		isRuntimeDisconnected,
 		hasReceivedSnapshot,
@@ -277,6 +279,7 @@ export function useProjectNavigation({ onProjectSwitchStart }: UseProjectNavigat
 		latestTaskReadyForReview,
 		latestMcpAuthStatuses,
 		clineSessionContextVersion,
+		overviewInvalidationVersions,
 		streamError,
 		isRuntimeDisconnected,
 		hasReceivedSnapshot,

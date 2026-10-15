@@ -60,6 +60,8 @@ import type {
 	RuntimeProjectDirectoryPickerResponse,
 	RuntimeProjectRemoveRequest,
 	RuntimeProjectRemoveResponse,
+	RuntimeProjectsOverviewRequest,
+	RuntimeProjectsOverviewResponse,
 	RuntimeProjectsResponse,
 	RuntimeRunUpdateResponse,
 	RuntimeShellSessionStartRequest,
@@ -152,6 +154,8 @@ import {
 	runtimeProjectDirectoryPickerResponseSchema,
 	runtimeProjectRemoveRequestSchema,
 	runtimeProjectRemoveResponseSchema,
+	runtimeProjectsOverviewRequestSchema,
+	runtimeProjectsOverviewResponseSchema,
 	runtimeProjectsResponseSchema,
 	runtimeRunUpdateResponseSchema,
 	runtimeShellSessionStartRequestSchema,
@@ -358,6 +362,9 @@ export interface RuntimeTrpcContext {
 	};
 	projectsApi: {
 		listProjects: (preferredWorkspaceId: string | null) => Promise<RuntimeProjectsResponse>;
+		loadProjectsOverview: (
+			input: RuntimeProjectsOverviewRequest | undefined,
+		) => Promise<RuntimeProjectsOverviewResponse>;
 		addProject: (
 			preferredWorkspaceId: string | null,
 			input: RuntimeProjectAddRequest,
@@ -700,6 +707,12 @@ export const runtimeAppRouter = t.router({
 		list: t.procedure.output(runtimeProjectsResponseSchema).query(async ({ ctx }) => {
 			return await ctx.projectsApi.listProjects(ctx.requestedWorkspaceId);
 		}),
+		overview: t.procedure
+			.input(runtimeProjectsOverviewRequestSchema.optional())
+			.output(runtimeProjectsOverviewResponseSchema)
+			.query(async ({ ctx, input }) => {
+				return await ctx.projectsApi.loadProjectsOverview(input);
+			}),
 		add: t.procedure
 			.input(runtimeProjectAddRequestSchema)
 			.output(runtimeProjectAddResponseSchema)
