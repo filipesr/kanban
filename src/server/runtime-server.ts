@@ -14,6 +14,7 @@ import type {
 	RuntimeCommandRunResponse,
 	RuntimeProjectsOverviewRequest,
 	RuntimeRunUpdateResponse,
+	RuntimeStatisticsRequest,
 	RuntimeTaskSessionSummary,
 	RuntimeUpdateStatusResponse,
 	RuntimeWorkspaceStateResponse,
@@ -38,7 +39,9 @@ import {
 	validatePasscode,
 	validateSession,
 } from "../security/passcode-manager";
+import { readTaskEvents } from "../state/task-event-log";
 import {
+	getWorkspaceDirectoryPath,
 	listWorkspaceIndexEntries,
 	loadWorkspaceBoardById,
 	loadWorkspaceContextById,
@@ -51,10 +54,12 @@ import { createHooksApi } from "../trpc/hooks-api";
 import { createProjectsApi } from "../trpc/projects-api";
 import { createRuntimeApi } from "../trpc/runtime-api";
 import { createWorkspaceApi } from "../trpc/workspace-api";
+import { getGitStatsCachePath, loadGitCommitStats } from "../workspace/git-stats";
 import { getWebUiDir, normalizeRequestPath, readAsset } from "./assets";
 import { handleHttpRequest, handleSocketUpgrade } from "./middleware";
 import { buildProjectsOverview } from "./projects-overview";
 import type { RuntimeStateHub } from "./runtime-state-hub";
+import { buildStatistics } from "./statistics";
 import type { WorkspaceRegistry } from "./workspace-registry";
 
 interface DisposeTrackedWorkspaceResult {
@@ -190,6 +195,23 @@ export async function createRuntimeServer(deps: CreateRuntimeServerDependencies)
 			},
 			request,
 		);
+	const loadStatistics = async (request: RuntimeStatisticsRequest) =>
+		await buildStatistics(
+			{
+				listProjects: listWorkspaceIndexEntries,
+				loadBoard: loadWorkspaceBoardById,
+				loadPersistedSessions: loadWorkspaceSessionsById,
+				listLiveSessions: listLiveTaskSessions,
+				loadEvents: async (workspaceId) => await readTaskEvents(getWorkspaceDirectoryPath(workspaceId)),
+				loadCommits: async (project) =>
+					await loadGitCommitStats(
+						project.repoPath,
+						getGitStatsCachePath(getWorkspaceDirectoryPath(project.workspaceId)),
+					),
+				warn: deps.warn,
+			},
+			request,
+		);
 	const prepareForStateReset = async (): Promise<void> => {
 		const workspaceIds = new Set<string>();
 		for (const { workspaceId } of deps.workspaceRegistry.listManagedWorkspaces()) {
@@ -263,6 +285,7 @@ export async function createRuntimeServer(deps: CreateRuntimeServerDependencies)
 				buildProjectsPayload: deps.workspaceRegistry.buildProjectsPayload,
 				pickDirectoryPathFromSystemDialog: deps.pickDirectoryPathFromSystemDialog,
 				buildProjectsOverview: loadProjectsOverview,
+				buildStatistics: loadStatistics,
 				serverCwd: process.cwd(),
 			}),
 			hooksApi: createHooksApi({

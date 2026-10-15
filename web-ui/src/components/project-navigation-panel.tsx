@@ -1,6 +1,17 @@
 import * as Collapsible from "@radix-ui/react-collapsible";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { ChevronDown, ChevronUp, Ellipsis, ExternalLink, Info, LayoutGrid, Lightbulb, Plus, X } from "lucide-react";
+import {
+	ChartColumn,
+	ChevronDown,
+	ChevronUp,
+	Ellipsis,
+	ExternalLink,
+	Info,
+	LayoutGrid,
+	Lightbulb,
+	Plus,
+	X,
+} from "lucide-react";
 import { type MouseEvent as ReactMouseEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { canShowFeaturebaseFeedbackButton } from "@/components/featurebase-feedback-button";
 import { Button } from "@/components/ui/button";
@@ -51,6 +62,8 @@ export function ProjectNavigationPanel({
 	currentProjectId,
 	isOverviewActive = false,
 	onOpenOverview,
+	isDashboardActive = false,
+	onOpenDashboard,
 	removingProjectId,
 	activeSection,
 	onActiveSectionChange,
@@ -73,6 +86,9 @@ export function ProjectNavigationPanel({
 	/** Whether the cross-project overview is the screen being shown. */
 	isOverviewActive?: boolean;
 	onOpenOverview?: () => void;
+	/** Whether the statistics dashboard is the screen being shown. */
+	isDashboardActive?: boolean;
+	onOpenDashboard?: () => void;
 	removingProjectId: string | null;
 	activeSection: "projects" | "agent";
 	onActiveSectionChange: (section: "projects" | "agent") => void;
@@ -228,27 +244,32 @@ export function ProjectNavigationPanel({
 					/>
 				)}
 				{onOpenOverview && sortedProjects.length > 0 ? (
-					<button
-						type="button"
-						title="All projects"
-						aria-label="All projects"
-						aria-current={isOverviewActive ? "page" : undefined}
+					<CollapsedViewButton
+						label="All projects"
+						icon={<LayoutGrid size={16} />}
+						isActive={isOverviewActive}
+						isMobile={isMobile}
 						onClick={() => {
 							if (isMobile) {
 								setCollapsed(false);
 							}
 							onOpenOverview();
 						}}
-						className={cn(
-							"rounded-md shrink-0 border-0 cursor-pointer flex items-center justify-center",
-							isMobile ? "w-11 h-11" : "w-8 h-8",
-							isOverviewActive
-								? "bg-accent text-accent-fg"
-								: "bg-transparent text-text-secondary hover:text-text-primary hover:bg-surface-3",
-						)}
-					>
-						<LayoutGrid size={16} />
-					</button>
+					/>
+				) : null}
+				{onOpenDashboard && sortedProjects.length > 0 ? (
+					<CollapsedViewButton
+						label="Dashboard"
+						icon={<ChartColumn size={16} />}
+						isActive={isDashboardActive}
+						isMobile={isMobile}
+						onClick={() => {
+							if (isMobile) {
+								setCollapsed(false);
+							}
+							onOpenDashboard();
+						}}
+					/>
 				) : null}
 				{sortedProjects.map((project) => {
 					const isCurrent = currentProjectId === project.id;
@@ -388,24 +409,30 @@ export function ProjectNavigationPanel({
 						) : null}
 
 						{onOpenOverview && sortedProjects.length > 0 ? (
-							<button
-								type="button"
-								aria-current={isOverviewActive ? "page" : undefined}
-								className={cn(
-									"kb-project-row flex cursor-pointer items-center gap-1.5 rounded-md",
-									isOverviewActive ? "kb-project-row-selected text-accent-fg" : "text-text-primary",
-								)}
-								style={{ padding: "6px 8px" }}
+							<ViewRow
+								label="All projects"
+								icon={<LayoutGrid size={14} className="shrink-0" />}
+								isActive={isOverviewActive}
 								onClick={() => {
 									onOpenOverview();
 									if (isMobile) {
 										setCollapsed(true);
 									}
 								}}
-							>
-								<LayoutGrid size={14} className="shrink-0" />
-								<span className="text-sm font-medium">All projects</span>
-							</button>
+							/>
+						) : null}
+						{onOpenDashboard && sortedProjects.length > 0 ? (
+							<ViewRow
+								label="Dashboard"
+								icon={<ChartColumn size={14} className="shrink-0" />}
+								isActive={isDashboardActive}
+								onClick={() => {
+									onOpenDashboard();
+									if (isMobile) {
+										setCollapsed(true);
+									}
+								}}
+							/>
 						) : null}
 
 						{sortedProjects.map((project) => (
@@ -878,5 +905,68 @@ function ProjectRow({
 				</DropdownMenu.Root>
 			</div>
 		</div>
+	);
+}
+
+/** A whole-app view (not a project) in the collapsed sidebar rail. */
+function CollapsedViewButton({
+	label,
+	icon,
+	isActive,
+	isMobile,
+	onClick,
+}: {
+	label: string;
+	icon: ReactNode;
+	isActive: boolean;
+	isMobile: boolean;
+	onClick: () => void;
+}): React.ReactElement {
+	return (
+		<button
+			type="button"
+			title={label}
+			aria-label={label}
+			aria-current={isActive ? "page" : undefined}
+			onClick={onClick}
+			className={cn(
+				"rounded-md shrink-0 border-0 cursor-pointer flex items-center justify-center",
+				isMobile ? "w-11 h-11" : "w-8 h-8",
+				isActive
+					? "bg-accent text-accent-fg"
+					: "bg-transparent text-text-secondary hover:text-text-primary hover:bg-surface-3",
+			)}
+		>
+			{icon}
+		</button>
+	);
+}
+
+/** A whole-app view (not a project) in the expanded sidebar, above the project rows. */
+function ViewRow({
+	label,
+	icon,
+	isActive,
+	onClick,
+}: {
+	label: string;
+	icon: ReactNode;
+	isActive: boolean;
+	onClick: () => void;
+}): React.ReactElement {
+	return (
+		<button
+			type="button"
+			aria-current={isActive ? "page" : undefined}
+			className={cn(
+				"kb-project-row flex cursor-pointer items-center gap-1.5 rounded-md",
+				isActive ? "kb-project-row-selected text-accent-fg" : "text-text-primary",
+			)}
+			style={{ padding: "6px 8px" }}
+			onClick={onClick}
+		>
+			{icon}
+			<span className="text-sm font-medium">{label}</span>
+		</button>
 	);
 }

@@ -17,6 +17,8 @@ interface GitCommandResult {
 export interface RunGitOptions {
 	trimStdout?: boolean;
 	env?: NodeJS.ProcessEnv;
+	/** For commands whose output grows with the repository, such as a full `git log --numstat`. */
+	maxBuffer?: number;
 }
 
 function normalizeProcessExitCode(code: unknown): number {
@@ -38,7 +40,7 @@ export async function runGit(cwd: string, args: string[], options: RunGitOptions
 		const { stdout, stderr } = await execFileAsync("git", fullArgs, {
 			cwd,
 			encoding: "utf8",
-			maxBuffer: GIT_MAX_BUFFER_BYTES,
+			maxBuffer: options.maxBuffer ?? GIT_MAX_BUFFER_BYTES,
 			env: options.env || createGitProcessEnv(),
 		});
 		const normalizedStdout = String(stdout ?? "").trim();

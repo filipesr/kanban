@@ -26,6 +26,7 @@ import type {
 	RuntimeTaskSessionSummary,
 } from "../core/api-contract";
 import { isHomeAgentSessionId } from "../core/home-agent-session";
+import { deriveSessionEvent, type RuntimeTaskEvent } from "../core/task-events";
 import { resolveTaskTitle } from "../core/task-title";
 import type { TerminalSessionManager } from "../terminal/session-manager";
 import { buildCardClosingActions, canReceiveTaskInput, resolveCardClosingState } from "./card-closing-state";
@@ -51,6 +52,11 @@ export interface CreateRuntimeStateHubDependencies {
 	hubNotifier?: ClineHubNotifier;
 	/** Overridable for tests; defaults to reading the card's worktree and repository with git. */
 	resolveCardClosingState?: typeof resolveCardClosingState;
+	/**
+	 * Where session state changes go for the statistics. Every session, terminal or native Cline,
+	 * reports through this hub, so this is the one place that sees them all.
+	 */
+	recordTaskEvents?: (workspaceId: string, events: RuntimeTaskEvent[]) => Promise<void>;
 }
 
 export interface RuntimeStateHub {
@@ -589,6 +595,20 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 	 * A running card saying what it is doing. Separate from the transition above because this
 	 * one supersedes itself: it is a status line, not an interruption.
 	 */
+	const recordSessionEvent = (
+		workspaceId: string,
+		previousSummary: RuntimeTaskSessionSummary | undefined,
+		summary: RuntimeTaskSessionSummary,
+	): void => {
+		const event = deriveSessionEvent(previousSummary, summary);
+		if (!event || !deps.recordTaskEvents) {
+			return;
+		}
+		void deps.recordTaskEvents(workspaceId, [event]).catch(() => {
+			// Statistics are best effort; a session must never stall on its log.
+		});
+	};
+
 	const handleCardProgress = (workspaceId: string, summary: RuntimeTaskSessionSummary): void => {
 		if (isHomeAgentSessionId(summary.taskId)) {
 			// The home sidebar agent is not a card, so it has no status line to keep on a phone.
@@ -803,6 +823,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 				handleTaskSessionSummaryTransition(workspaceId, previousSummary, summary);
 				handleQuestionAnswered(workspaceId, previousSummary, summary);
 				handleCardProgress(workspaceId, summary);
+				recordSessionEvent(workspaceId, previousSummary, summary);
 			});
 			terminalSummaryUnsubscribeByWorkspaceId.set(workspaceId, unsubscribe);
 		},
@@ -829,6 +850,7 @@ export function createRuntimeStateHub(deps: CreateRuntimeStateHubDependencies): 
 				handleTaskSessionSummaryTransition(workspaceId, previousSummary, summary);
 				handleQuestionAnswered(workspaceId, previousSummary, summary);
 				handleCardProgress(workspaceId, summary);
+				recordSessionEvent(workspaceId, previousSummary, summary);
 			});
 			clineSummaryUnsubscribeByWorkspaceId.set(workspaceId, unsubscribe);
 			const unsubscribeMessage = service.onMessage((taskId, message) => {

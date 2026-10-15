@@ -419,6 +419,96 @@ export const runtimeProjectsOverviewRequestSchema = z.object({
 });
 export type RuntimeProjectsOverviewRequest = z.infer<typeof runtimeProjectsOverviewRequestSchema>;
 
+export const runtimeStatisticsGranularitySchema = z.enum(["day", "week", "month"]);
+export type RuntimeStatisticsGranularity = z.infer<typeof runtimeStatisticsGranularitySchema>;
+
+export const runtimeStatisticsRequestSchema = z.object({
+	/** One project, or every registered project when omitted. */
+	projectId: z.string().nullable().optional(),
+	granularity: runtimeStatisticsGranularitySchema,
+	from: z.number(),
+	to: z.number(),
+	/** IANA zone the periods are cut in, so a "day" is the viewer's day. Falls back to UTC. */
+	timeZone: z.string(),
+});
+export type RuntimeStatisticsRequest = z.infer<typeof runtimeStatisticsRequestSchema>;
+
+export const runtimeStatisticsCountsSchema = z.object({
+	created: z.number(),
+	/** Cards that entered In Progress in the period (each card once per period). */
+	started: z.number(),
+	/** Cards that entered Review in the period. */
+	reviewed: z.number(),
+	/** Cards that entered Done in the period. */
+	completed: z.number(),
+	commits: z.number(),
+	filesChanged: z.number(),
+	filesCreated: z.number(),
+	additions: z.number(),
+	deletions: z.number(),
+	/** Time agent sessions spent running, counted in the period the run ended. */
+	agentWorkMs: z.number(),
+});
+export type RuntimeStatisticsCounts = z.infer<typeof runtimeStatisticsCountsSchema>;
+
+export const runtimeStatisticsBucketSchema = runtimeStatisticsCountsSchema.extend({
+	/** The period's first day, `YYYY-MM-DD` in the requested zone. */
+	key: z.string(),
+});
+export type RuntimeStatisticsBucket = z.infer<typeof runtimeStatisticsBucketSchema>;
+
+export const runtimeStatisticsDurationSchema = z.object({
+	count: z.number(),
+	meanMs: z.number().nullable(),
+	medianMs: z.number().nullable(),
+});
+export type RuntimeStatisticsDuration = z.infer<typeof runtimeStatisticsDurationSchema>;
+
+export const runtimeStatisticsProjectSchema = z.object({
+	id: z.string(),
+	name: z.string(),
+	path: z.string(),
+	totals: runtimeStatisticsCountsSchema,
+	wip: runtimeProjectTaskCountsSchema,
+	/** When this project's event log starts; card flow before it is unknown. */
+	flowDataSince: z.number().nullable(),
+	/** Why git stats are missing for this project, when they are. */
+	gitError: z.string().nullable(),
+});
+export type RuntimeStatisticsProject = z.infer<typeof runtimeStatisticsProjectSchema>;
+
+export const runtimeStatisticsResponseSchema = z.object({
+	granularity: runtimeStatisticsGranularitySchema,
+	timeZone: z.string(),
+	from: z.number(),
+	to: z.number(),
+	generatedAt: z.number(),
+	/** The earliest event across the projects in scope. */
+	flowDataSince: z.number().nullable(),
+	projects: z.array(runtimeStatisticsProjectSchema),
+	buckets: z.array(runtimeStatisticsBucketSchema),
+	totals: runtimeStatisticsCountsSchema,
+	/** Cards per column right now, live session state applied. */
+	wip: runtimeProjectTaskCountsSchema,
+	rates: z.object({
+		/** Completed over created in the period; above 1 when the backlog shrank. */
+		completionRate: z.number().nullable(),
+		/** Share of the open cards (not Done) that sit in Review now. */
+		reviewShare: z.number().nullable(),
+	}),
+	durations: z.object({
+		/** Creation to Done, for cards finished in the period. */
+		leadTime: runtimeStatisticsDurationSchema,
+		/** Each stay in In Progress that ended in the period. */
+		inProgress: runtimeStatisticsDurationSchema,
+		/** Each stay in Review that ended in the period. */
+		inReview: runtimeStatisticsDurationSchema,
+		/** Each agent run that ended in the period. */
+		agentRun: runtimeStatisticsDurationSchema,
+	}),
+});
+export type RuntimeStatisticsResponse = z.infer<typeof runtimeStatisticsResponseSchema>;
+
 export const runtimeProjectsOverviewResponseSchema = z.object({
 	projects: z.array(runtimeProjectsOverviewProjectSchema),
 	cards: z.array(runtimeProjectsOverviewCardSchema),

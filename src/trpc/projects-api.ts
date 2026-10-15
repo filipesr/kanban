@@ -8,6 +8,8 @@ import type {
 	RuntimeProjectsOverviewRequest,
 	RuntimeProjectsOverviewResponse,
 	RuntimeProjectTaskCounts,
+	RuntimeStatisticsRequest,
+	RuntimeStatisticsResponse,
 } from "../core/api-contract";
 import { parseDirectoryListRequest, parseProjectAddRequest, parseProjectRemoveRequest } from "../core/api-validation";
 import {
@@ -60,6 +62,7 @@ export interface CreateProjectsApiDependencies {
 	buildProjectsOverview: (
 		request: RuntimeProjectsOverviewRequest | undefined,
 	) => Promise<RuntimeProjectsOverviewResponse>;
+	buildStatistics: (request: RuntimeStatisticsRequest) => Promise<RuntimeStatisticsResponse>;
 	serverCwd: string;
 }
 
@@ -75,6 +78,7 @@ export function createProjectsApi(deps: CreateProjectsApiDependencies): RuntimeT
 			};
 		},
 		loadProjectsOverview: async (input) => await deps.buildProjectsOverview(input),
+		loadStatistics: async (input) => await deps.buildStatistics(input),
 		addProject: async (preferredWorkspaceId, input) => {
 			const body = parseProjectAddRequest(input);
 			const preferredWorkspaceContext = preferredWorkspaceId

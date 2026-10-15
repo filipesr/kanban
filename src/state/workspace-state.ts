@@ -18,7 +18,9 @@ import {
 } from "../core/api-contract";
 import { createGitProcessEnv } from "../core/git-process-env";
 import { updateTaskDependencies } from "../core/task-board-mutations";
+import { diffBoardEvents } from "../core/task-events";
 import { type LockRequest, lockedFileSystem } from "../fs/locked-file-system";
+import { appendTaskEvents } from "./task-event-log";
 
 const RUNTIME_HOME_PARENT_DIR = ".cline";
 const RUNTIME_HOME_DIR = "kanban";
@@ -643,6 +645,27 @@ export async function removeWorkspaceStateFiles(workspaceId: string): Promise<vo
 	);
 }
 
+/**
+ * Logs what changed between the board on disk and the one replacing it. Called by both board
+ * writers while they hold the workspace lock, so the comparison sees exactly the board being
+ * replaced. Best effort: a log that cannot be written must not stop the board from saving.
+ */
+async function recordBoardEvents(
+	workspaceId: string,
+	previousBoard: RuntimeBoardData | null,
+	nextBoard: RuntimeBoardData,
+	at: number,
+): Promise<void> {
+	if (!previousBoard) {
+		return;
+	}
+	try {
+		await appendTaskEvents(getWorkspaceDirectoryPath(workspaceId), diffBoardEvents(previousBoard, nextBoard, at));
+	} catch {
+		// The statistics lose this change; the board itself is already saved.
+	}
+}
+
 export async function loadWorkspaceState(cwd: string): Promise<RuntimeWorkspaceStateResponse> {
 	const context = await loadWorkspaceContext(cwd);
 	const board = await readWorkspaceBoard(context.workspaceId);
@@ -671,6 +694,8 @@ export async function saveWorkspaceState(
 		}
 		const board = parsedPayload.board;
 		const sessions = parsedPayload.sessions;
+		// Only for the event log, so a board on disk that no longer parses must not block the save.
+		const previousBoard = await readWorkspaceBoard(context.workspaceId).catch(() => null);
 		const nextRevision = currentMeta.revision + 1;
 		const nextMeta: WorkspaceStateMeta = {
 			revision: nextRevision,
@@ -686,6 +711,7 @@ export async function saveWorkspaceState(
 		await lockedFileSystem.writeJsonFileAtomic(metaPath, nextMeta, {
 			lock: null,
 		});
+		await recordBoardEvents(context.workspaceId, previousBoard, board, nextMeta.updatedAt);
 
 		return toWorkspaceStateResponse(context, board, sessions, nextRevision);
 	});
@@ -744,6 +770,7 @@ export async function mutateWorkspaceState<T>(
 		await lockedFileSystem.writeJsonFileAtomic(getWorkspaceMetaPath(context.workspaceId), nextMeta, {
 			lock: null,
 		});
+		await recordBoardEvents(context.workspaceId, currentBoard, nextBoard, nextMeta.updatedAt);
 
 		return {
 			value: mutation.value,

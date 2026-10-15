@@ -30,7 +30,7 @@ export interface ProjectsOverviewDependencies {
 	warn?: (message: string) => void;
 }
 
-function pickNewestSessions(
+export function pickNewestSessions(
 	persisted: Record<string, RuntimeTaskSessionSummary>,
 	live: RuntimeTaskSessionSummary[],
 ): Map<string, RuntimeTaskSessionSummary> {

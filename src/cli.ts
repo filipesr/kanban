@@ -396,6 +396,8 @@ async function startServer(): Promise<{
 		{ shutdownRuntimeServer },
 		{ collectProjectWorktreeTaskIdsForRemoval, createWorkspaceRegistry },
 		{ clearPendingUpdateNotification, getPendingUpdateNotification },
+		{ appendTaskEvents },
+		{ getWorkspaceDirectoryPath },
 	] = await Promise.all([
 		import("./projects/project-path.js"),
 		import("./server/directory-picker.js"),
@@ -405,6 +407,8 @@ async function startServer(): Promise<{
 		import("./server/shutdown-coordinator.js"),
 		import("./server/workspace-registry.js"),
 		import("./update/update.js"),
+		import("./state/task-event-log.js"),
+		import("./state/workspace-state.js"),
 	]);
 	let runtimeStateHub: RuntimeStateHub | undefined;
 	const workspaceRegistry = await createWorkspaceRegistry({
@@ -419,6 +423,8 @@ async function startServer(): Promise<{
 	});
 	runtimeStateHub = createRuntimeStateHub({
 		workspaceRegistry,
+		recordTaskEvents: async (workspaceId, events) =>
+			await appendTaskEvents(getWorkspaceDirectoryPath(workspaceId), events),
 	});
 	const runtimeHub = runtimeStateHub;
 	for (const { workspaceId, terminalManager } of workspaceRegistry.listManagedWorkspaces()) {

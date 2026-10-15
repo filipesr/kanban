@@ -67,6 +67,8 @@ import type {
 	RuntimeShellSessionStartRequest,
 	RuntimeShellSessionStartResponse,
 	RuntimeSlashCommandsResponse,
+	RuntimeStatisticsRequest,
+	RuntimeStatisticsResponse,
 	RuntimeTaskChatAbortRequest,
 	RuntimeTaskChatAbortResponse,
 	RuntimeTaskChatCancelRequest,
@@ -161,6 +163,8 @@ import {
 	runtimeShellSessionStartRequestSchema,
 	runtimeShellSessionStartResponseSchema,
 	runtimeSlashCommandsResponseSchema,
+	runtimeStatisticsRequestSchema,
+	runtimeStatisticsResponseSchema,
 	runtimeTaskChatAbortRequestSchema,
 	runtimeTaskChatAbortResponseSchema,
 	runtimeTaskChatCancelRequestSchema,
@@ -365,6 +369,7 @@ export interface RuntimeTrpcContext {
 		loadProjectsOverview: (
 			input: RuntimeProjectsOverviewRequest | undefined,
 		) => Promise<RuntimeProjectsOverviewResponse>;
+		loadStatistics: (input: RuntimeStatisticsRequest) => Promise<RuntimeStatisticsResponse>;
 		addProject: (
 			preferredWorkspaceId: string | null,
 			input: RuntimeProjectAddRequest,
@@ -712,6 +717,12 @@ export const runtimeAppRouter = t.router({
 			.output(runtimeProjectsOverviewResponseSchema)
 			.query(async ({ ctx, input }) => {
 				return await ctx.projectsApi.loadProjectsOverview(input);
+			}),
+		statistics: t.procedure
+			.input(runtimeStatisticsRequestSchema)
+			.output(runtimeStatisticsResponseSchema)
+			.query(async ({ ctx, input }) => {
+				return await ctx.projectsApi.loadStatistics(input);
 			}),
 		add: t.procedure
 			.input(runtimeProjectAddRequestSchema)

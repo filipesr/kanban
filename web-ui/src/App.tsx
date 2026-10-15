@@ -9,6 +9,7 @@ import { AddProjectDialog } from "@/components/add-project-dialog";
 import { notifyError, showAppToast } from "@/components/app-toaster";
 import { CardDetailView } from "@/components/card-detail-view";
 import { ClearTrashDialog } from "@/components/clear-trash-dialog";
+import { DashboardView } from "@/components/dashboard/dashboard-view";
 import { DebugDialog } from "@/components/debug-dialog";
 import { AgentTerminalPanel } from "@/components/detail-panels/agent-terminal-panel";
 import { GitHistoryView } from "@/components/git-history-view";
@@ -91,6 +92,7 @@ export default function App(): ReactElement {
 	const [homeSidebarSection, setHomeSidebarSection] = useState<"projects" | "agent">("projects");
 	const [isClearTrashDialogOpen, setIsClearTrashDialogOpen] = useState(false);
 	const [isGitHistoryOpen, setIsGitHistoryOpen] = useState(false);
+	const [isDashboardOpen, setIsDashboardOpen] = useState(false);
 	const [pendingTaskStartAfterEditId, setPendingTaskStartAfterEditId] = useState<string | null>(null);
 	const taskEditorResetRef = useRef<() => void>(() => {});
 	const lastStreamErrorRef = useRef<string | null>(null);
@@ -569,6 +571,7 @@ export default function App(): ReactElement {
 			return;
 		}
 		closeOverview();
+		setIsDashboardOpen(false);
 		setIsGitHistoryOpen((current) => !current);
 	}, [closeOverview, hasNoProjects]);
 	const handleCloseGitHistory = useCallback(() => {
@@ -827,11 +830,18 @@ export default function App(): ReactElement {
 					<ProjectNavigationPanel
 						projects={displayedProjects}
 						isLoadingProjects={isProjectListLoading}
-						currentProjectId={isOverviewOpen ? null : navigationCurrentProjectId}
+						currentProjectId={isOverviewOpen || isDashboardOpen ? null : navigationCurrentProjectId}
 						isOverviewActive={isOverviewOpen}
 						onOpenOverview={() => {
 							setIsGitHistoryOpen(false);
+							setIsDashboardOpen(false);
 							openOverview();
+						}}
+						isDashboardActive={isDashboardOpen}
+						onOpenDashboard={() => {
+							setIsGitHistoryOpen(false);
+							closeOverview();
+							setIsDashboardOpen(true);
 						}}
 						removingProjectId={removingProjectId}
 						activeSection={homeSidebarSection}
@@ -843,6 +853,7 @@ export default function App(): ReactElement {
 						featurebaseFeedbackState={featurebaseFeedbackState}
 						onSelectProject={(projectId) => {
 							closeOverview();
+							setIsDashboardOpen(false);
 							void handleSelectProject(projectId);
 						}}
 						onRemoveProject={handleRemoveProject}
@@ -943,7 +954,12 @@ export default function App(): ReactElement {
 							) : (
 								<div className="flex flex-1 flex-col min-h-0 min-w-0">
 									<div className="flex flex-1 min-h-0 min-w-0">
-										{isOverviewOpen ? (
+										{isDashboardOpen ? (
+											<DashboardView
+												projects={projects}
+												invalidationVersions={overviewInvalidationVersions}
+											/>
+										) : isOverviewOpen ? (
 											<ProjectsOverviewView
 												invalidationVersions={overviewInvalidationVersions}
 												projectIds={overviewProjectIds}

@@ -39,6 +39,13 @@
 	--color-status-cyan: #06B6D4;
 	--color-status-lime: #84CC16;
 
+	/* Chart series, in fixed order (validated for color-vision deficiency on the dark surfaces).
+	   Slot 1..4 follow the card flow: created/backlog, started/in progress, review, done. */
+	--color-chart-1: #3987E5;
+	--color-chart-2: #D95926;
+	--color-chart-3: #199E70;
+	--color-chart-4: #C98500;
+
 	/* Typography */
 	--font-sans: "Geist", "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 	--font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
@@ -56,6 +63,18 @@
    status colors, typography, and border-radius stay constant.
    Backgrounds are always neutral greys / black / white — accent colors
    provide personality. */
+
+/* Light surfaces take the light steps of the same chart hues. */
+[data-theme="light"],
+[data-theme="overcast"],
+[data-theme="solarized-light"],
+[data-theme="latte"],
+[data-theme="high-contrast-light"] {
+	--color-chart-1: #2A78D6;
+	--color-chart-2: #EB6834;
+	--color-chart-3: #1BAF7A;
+	--color-chart-4: #EDA100;
+}
 
 /* --- Dark themes ----------------------------------------------------- */
 
