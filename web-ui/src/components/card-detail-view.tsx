@@ -1,5 +1,14 @@
 import type { DropResult } from "@hello-pangea/dnd";
-import { Files, GitCompareArrows, Maximize2, MessageSquare, Minimize2, X } from "lucide-react";
+import {
+	Files,
+	GitCompareArrows,
+	Maximize2,
+	MessageSquare,
+	Minimize2,
+	PanelRightClose,
+	PanelRightOpen,
+	X,
+} from "lucide-react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
@@ -267,12 +276,14 @@ function DiffToolbar({
 	isExpanded,
 	onToggleExpand,
 	hideExpand,
+	onHide,
 }: {
 	mode: RuntimeWorkspaceChangesMode;
 	onModeChange: (mode: RuntimeWorkspaceChangesMode) => void;
 	isExpanded: boolean;
 	onToggleExpand: () => void;
 	hideExpand?: boolean;
+	onHide?: () => void;
 }): React.ReactElement {
 	return (
 		<div className="flex items-center gap-1 border-b border-divider px-2 py-1">
@@ -294,16 +305,45 @@ function DiffToolbar({
 					Last Turn
 				</DiffModeButton>
 			</div>
-			{!hideExpand ? (
-				<Button
-					variant="ghost"
-					size="sm"
-					icon={isExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-					onClick={onToggleExpand}
-					className="ml-auto h-5"
-					aria-label={isExpanded ? "Collapse split diff view" : "Expand split diff view"}
-				/>
-			) : null}
+			<div className="ml-auto flex items-center gap-0.5">
+				{!hideExpand ? (
+					<Button
+						variant="ghost"
+						size="sm"
+						icon={isExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+						onClick={onToggleExpand}
+						className="h-5"
+						aria-label={isExpanded ? "Collapse split diff view" : "Expand split diff view"}
+					/>
+				) : null}
+				{onHide ? (
+					<Button
+						variant="ghost"
+						size="sm"
+						icon={<PanelRightClose size={14} />}
+						onClick={onHide}
+						className="h-5"
+						aria-label="Hide files and diff"
+						title="Hide files and diff"
+					/>
+				) : null}
+			</div>
+		</div>
+	);
+}
+
+function HiddenDiffPanelStrip({ onShow }: { onShow: () => void }): React.ReactElement {
+	return (
+		<div className="flex shrink-0 flex-col items-center border-l border-divider px-1 py-1">
+			<Button
+				variant="ghost"
+				size="sm"
+				icon={<PanelRightOpen size={14} />}
+				onClick={onShow}
+				className="h-5"
+				aria-label="Show files and diff"
+				title="Show files and diff"
+			/>
 		</div>
 	);
 }
@@ -447,6 +487,8 @@ export function CardDetailView({
 		setAgentPanelRatio,
 		detailDiffFileTreeRatio,
 		setDetailDiffFileTreeRatio,
+		isDiffPanelHidden,
+		setDiffPanelHidden,
 	} = useCardDetailLayout({
 		isDiffExpanded,
 	});
@@ -603,6 +645,15 @@ export function CardDetailView({
 		}
 		setIsDiffExpanded((previous) => !previous);
 	}, [bottomTerminalOpen, isDiffExpanded, onBottomTerminalClose]);
+
+	const handleHideDiffPanel = useCallback(() => {
+		setIsDiffExpanded(false);
+		setDiffPanelHidden(true);
+	}, [setDiffPanelHidden]);
+
+	const handleShowDiffPanel = useCallback(() => {
+		setDiffPanelHidden(false);
+	}, [setDiffPanelHidden]);
 
 	const handleAddDiffComments = useCallback(
 		(formatted: string) => {
@@ -842,12 +893,16 @@ export function CardDetailView({
 					<>
 						<div ref={mainRowRef} className="flex min-h-0 flex-1 overflow-hidden">
 							<div
-								className="min-h-0 min-w-0"
-								style={{ display: isDiffExpanded ? "none" : "flex", width: agentPanelPercent }}
+								className={cn("min-h-0 min-w-0", isDiffPanelHidden && "flex-1")}
+								style={{
+									display: isDiffExpanded ? "none" : "flex",
+									width: isDiffPanelHidden ? undefined : agentPanelPercent,
+								}}
 							>
 								{agentChatPanel}
 							</div>
-							{!isDiffExpanded ? (
+							{isDiffPanelHidden ? <HiddenDiffPanelStrip onShow={handleShowDiffPanel} /> : null}
+							{!isDiffExpanded && !isDiffPanelHidden ? (
 								<ResizeHandle
 									orientation="vertical"
 									ariaLabel="Resize agent and diff panels"
@@ -856,8 +911,11 @@ export function CardDetailView({
 								/>
 							) : null}
 							<div
-								className="flex min-h-0 min-w-0 flex-col"
-								style={{ width: isDiffExpanded ? "100%" : diffPanelPercent }}
+								className="min-h-0 min-w-0 flex-col"
+								style={{
+									display: isDiffPanelHidden ? "none" : "flex",
+									width: isDiffExpanded ? "100%" : diffPanelPercent,
+								}}
 							>
 								{isRuntimeAvailable ? (
 									<DiffToolbar
@@ -865,6 +923,7 @@ export function CardDetailView({
 										onModeChange={setDiffMode}
 										isExpanded={isDiffExpanded}
 										onToggleExpand={handleToggleDiffExpand}
+										onHide={isDiffExpanded ? undefined : handleHideDiffPanel}
 									/>
 								) : null}
 								<div className="flex min-h-0 flex-1">

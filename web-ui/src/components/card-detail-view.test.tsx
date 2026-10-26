@@ -776,4 +776,61 @@ describe("CardDetailView", () => {
 
 		expect(requireDetailDiffFileTreePanel(container).style.flex).toBe("0 0 18%");
 	});
+	it("hides the files and diff panel and remembers it", async () => {
+		const renderDetail = async () => {
+			await act(async () => {
+				root.render(
+					<CardDetailView
+						selection={createSelection()}
+						currentProjectId="workspace-1"
+						sessionSummary={null}
+						taskSessions={{}}
+						onSessionSummary={() => {}}
+						onCardSelect={() => {}}
+						onTaskDragEnd={() => {}}
+						onMoveToTrash={() => {}}
+						bottomTerminalOpen={false}
+						bottomTerminalTaskId={null}
+						bottomTerminalSummary={null}
+						onBottomTerminalClose={() => {}}
+					/>,
+				);
+			});
+		};
+		const isDiffPanelVisible = () =>
+			container.querySelector('[data-testid="diff-viewer-panel"]')?.closest<HTMLElement>("[style*='display']")?.style
+				.display !== "none";
+
+		await renderDetail();
+		expect(isDiffPanelVisible()).toBe(true);
+
+		const hideButton = container.querySelector('button[aria-label="Hide files and diff"]');
+		if (!(hideButton instanceof HTMLButtonElement)) {
+			throw new Error("Expected a hide files and diff button.");
+		}
+		await act(async () => {
+			hideButton.click();
+		});
+
+		expect(isDiffPanelVisible()).toBe(false);
+		expect(window.localStorage.getItem(LocalStorageKey.DetailDiffPanelHidden)).toBe("true");
+
+		act(() => {
+			root.unmount();
+		});
+		root = createRoot(container);
+		await renderDetail();
+		expect(isDiffPanelVisible()).toBe(false);
+
+		const showButton = container.querySelector('button[aria-label="Show files and diff"]');
+		if (!(showButton instanceof HTMLButtonElement)) {
+			throw new Error("Expected a show files and diff button.");
+		}
+		await act(async () => {
+			showButton.click();
+		});
+
+		expect(isDiffPanelVisible()).toBe(true);
+		expect(window.localStorage.getItem(LocalStorageKey.DetailDiffPanelHidden)).toBe("false");
+	});
 });
