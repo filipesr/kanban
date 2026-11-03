@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BoardColumn } from "@/components/board-column";
 import { DependencyOverlay } from "@/components/dependencies/dependency-overlay";
 import { useDependencyLinking } from "@/components/dependencies/use-dependency-linking";
+import { useCollapsibleBoardColumns } from "@/hooks/use-collapsible-board-columns";
 import type { RuntimeTaskSessionSummary } from "@/runtime/types";
 import { canCreateTaskDependency } from "@/state/board-state";
 import { findCardColumnId, type ProgrammaticCardMoveInFlight } from "@/state/drag-rules";
@@ -87,6 +88,7 @@ export function KanbanBoard({
 	const sensorApiRef = useRef<SensorAPI | null>(null);
 	const latestDataRef = useRef<BoardData>(data);
 	const programmaticCardMoveInFlightRef = useRef<ProgrammaticCardMoveInFlight | null>(null);
+	const collapsibleColumns = useCollapsibleBoardColumns();
 	const [activeDragTaskId, setActiveDragTaskId] = useState<string | null>(null);
 
 	const [activeDragSourceColumnId, setActiveDragSourceColumnId] = useState<BoardColumnId | null>(null);
@@ -411,6 +413,12 @@ export function KanbanBoard({
 						isDependencyLinking={dependencyLinking.draft !== null}
 						workspacePath={workspacePath}
 						defaultClineModelId={defaultClineModelId}
+						isCollapsed={collapsibleColumns.isCollapsed(column.id)}
+						onCollapsedChange={
+							collapsibleColumns.isCollapsible(column.id)
+								? (collapsed) => collapsibleColumns.setCollapsed(column.id, collapsed)
+								: undefined
+						}
 						onCardClick={(card) => {
 							if (!dragOccurredRef.current) {
 								onCardSelect(card.id);

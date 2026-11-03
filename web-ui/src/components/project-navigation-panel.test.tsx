@@ -235,4 +235,40 @@ describe("ProjectNavigationPanel width persistence", () => {
 		expect(container.textContent).toContain("Tips");
 		expect(localStorage.getItem(LocalStorageKey.AgentTipsDismissed)).toBeNull();
 	});
+
+	it("collapses the project list and remembers it", () => {
+		renderPanel();
+		expect(container.textContent).toContain("/tmp/kanban");
+
+		const collapseButton = container.querySelector('[aria-label="Collapse projects"]') as HTMLButtonElement;
+		act(() => {
+			collapseButton.click();
+		});
+
+		expect(container.textContent).not.toContain("/tmp/kanban");
+		expect(container.textContent).not.toContain("Add Project");
+		expect(localStorage.getItem(LocalStorageKey.ProjectNavigationProjectsCollapsed)).toBe("true");
+
+		const expandButton = container.querySelector('[aria-label="Expand projects"]') as HTMLButtonElement;
+		act(() => {
+			expandButton.click();
+		});
+
+		expect(container.textContent).toContain("/tmp/kanban");
+		expect(localStorage.getItem(LocalStorageKey.ProjectNavigationProjectsCollapsed)).toBe("false");
+	});
+
+	it("starts with the shortcuts collapsed when that was remembered", () => {
+		localStorage.setItem(LocalStorageKey.ProjectNavigationShortcutsCollapsed, "true");
+		renderPanel();
+		expect(container.textContent).not.toContain("Toggle terminal");
+
+		const expandButton = container.querySelector('[aria-label="Expand shortcuts"]') as HTMLButtonElement;
+		act(() => {
+			expandButton.click();
+		});
+
+		expect(container.textContent).toContain("Toggle terminal");
+		expect(localStorage.getItem(LocalStorageKey.ProjectNavigationShortcutsCollapsed)).toBe("false");
+	});
 });

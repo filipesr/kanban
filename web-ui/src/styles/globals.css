@@ -1152,6 +1152,11 @@ body.kb-dependency-link-mode {
 		scroll-snap-align: center;
 	}
 
+	.kb-board > section[data-collapsed="true"] {
+		min-width: 0;
+		width: 40px;
+	}
+
 	.kb-board > [role="separator"] {
 		display: none;
 	}

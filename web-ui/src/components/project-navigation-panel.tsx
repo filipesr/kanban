@@ -3,6 +3,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
 	ChartColumn,
 	ChevronDown,
+	ChevronRight,
 	ChevronUp,
 	Ellipsis,
 	ExternalLink,
@@ -40,7 +41,7 @@ import {
 } from "@/storage/local-storage-store";
 import { formatPathForDisplay } from "@/utils/path-display";
 import { isMacPlatform, modifierKeyLabel } from "@/utils/platform";
-import { useUnmount, useWindowEvent } from "@/utils/react-use";
+import { useBooleanLocalStorageValue, useUnmount, useWindowEvent } from "@/utils/react-use";
 
 const COLLAPSED_WIDTH = 48;
 const SIDEBAR_COLLAPSE_THRESHOLD = 120;
@@ -111,6 +112,11 @@ export function ProjectNavigationPanel({
 		clineProviderSettings,
 		featurebaseFeedbackState,
 	});
+
+	const [isProjectListCollapsed, setProjectListCollapsed] = useBooleanLocalStorageValue(
+		LocalStorageKey.ProjectNavigationProjectsCollapsed,
+		false,
+	);
 
 	const [pendingProjectRemoval, setPendingProjectRemoval] = useState<RuntimeProjectSummary | null>(null);
 	const isProjectRemovalPending = pendingProjectRemoval !== null && removingProjectId === pendingProjectRemoval.id;
@@ -435,39 +441,54 @@ export function ProjectNavigationPanel({
 							/>
 						) : null}
 
-						{sortedProjects.map((project) => (
-							<ProjectRow
-								key={project.id}
-								project={project}
-								isCurrent={currentProjectId === project.id}
-								removingProjectId={removingProjectId}
-								onSelect={(projectId) => {
-									onSelectProject(projectId);
-									if (isMobile) {
-										setCollapsed(true);
-									}
-								}}
-								onRemove={(projectId) => {
-									const found = sortedProjects.find((item) => item.id === projectId);
-									if (!found) {
-										return;
-									}
-									setPendingProjectRemoval(found);
-								}}
-							/>
-						))}
-
-						{!isLoadingProjects ? (
-							<button
-								type="button"
-								className="kb-project-row flex cursor-pointer items-center gap-1.5 rounded-md text-text-secondary hover:text-text-primary"
-								style={{ padding: "6px 8px" }}
-								onClick={onAddProject}
-								disabled={removingProjectId !== null}
+						{sortedProjects.length > 0 || !isLoadingProjects ? (
+							<Collapsible.Root
+								open={!isProjectListCollapsed}
+								onOpenChange={(open) => setProjectListCollapsed(!open)}
+								className="flex flex-col gap-1"
 							>
-								<Plus size={14} className="shrink-0" />
-								<span className="text-sm">Add Project</span>
-							</button>
+								<SidebarSectionTrigger
+									label="Projects"
+									count={sortedProjects.length}
+									isOpen={!isProjectListCollapsed}
+								/>
+								<Collapsible.Content className="flex flex-col gap-1">
+									{sortedProjects.map((project) => (
+										<ProjectRow
+											key={project.id}
+											project={project}
+											isCurrent={currentProjectId === project.id}
+											removingProjectId={removingProjectId}
+											onSelect={(projectId) => {
+												onSelectProject(projectId);
+												if (isMobile) {
+													setCollapsed(true);
+												}
+											}}
+											onRemove={(projectId) => {
+												const found = sortedProjects.find((item) => item.id === projectId);
+												if (!found) {
+													return;
+												}
+												setPendingProjectRemoval(found);
+											}}
+										/>
+									))}
+
+									{!isLoadingProjects ? (
+										<button
+											type="button"
+											className="kb-project-row flex cursor-pointer items-center gap-1.5 rounded-md text-text-secondary hover:text-text-primary"
+											style={{ padding: "6px 8px" }}
+											onClick={onAddProject}
+											disabled={removingProjectId !== null}
+										>
+											<Plus size={14} className="shrink-0" />
+											<span className="text-sm">Add Project</span>
+										</button>
+									) : null}
+								</Collapsible.Content>
+							</Collapsible.Root>
 						) : null}
 					</div>
 					<ShortcutsCard />
@@ -693,12 +714,46 @@ function ShortcutHint({ keys, label }: { keys: string[]; label: string }): React
 	);
 }
 
+/** The heading that folds a sidebar section (the project list, the shortcuts) away. */
+function SidebarSectionTrigger({
+	label,
+	count,
+	isOpen,
+}: {
+	label: string;
+	count?: number;
+	isOpen: boolean;
+}): React.ReactElement {
+	return (
+		<Collapsible.Trigger asChild>
+			<button
+				type="button"
+				aria-label={`${isOpen ? "Collapse" : "Expand"} ${label.toLowerCase()}`}
+				className="flex w-full cursor-pointer items-center gap-1 rounded-sm border-none bg-transparent px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-text-tertiary hover:text-text-secondary"
+			>
+				{isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+				<span>{label}</span>
+				{count !== undefined ? <span className="font-normal">{count}</span> : null}
+			</button>
+		</Collapsible.Trigger>
+	);
+}
+
 function ShortcutsCard(): React.ReactElement {
+	const [isCollapsed, setCollapsed] = useBooleanLocalStorageValue(
+		LocalStorageKey.ProjectNavigationShortcutsCollapsed,
+		false,
+	);
 	const [expanded, setExpanded] = useState(false);
 
 	return (
-		<div style={{ padding: "8px 12px" }}>
-			<div style={{ padding: "0 8px" }}>
+		<Collapsible.Root
+			open={!isCollapsed}
+			onOpenChange={(open) => setCollapsed(!open)}
+			style={{ padding: "8px 12px" }}
+		>
+			<SidebarSectionTrigger label="Shortcuts" isOpen={!isCollapsed} />
+			<Collapsible.Content style={{ padding: "0 8px" }}>
 				<div className="flex flex-col gap-0.5">
 					{ESSENTIAL_SHORTCUTS.map((s) => (
 						<ShortcutHint key={s.label} keys={s.keys} label={s.label} />
@@ -722,8 +777,8 @@ function ShortcutsCard(): React.ReactElement {
 						</button>
 					</Collapsible.Trigger>
 				</Collapsible.Root>
-			</div>
-		</div>
+			</Collapsible.Content>
+		</Collapsible.Root>
 	);
 }
 

@@ -1,9 +1,10 @@
 import { Droppable } from "@hello-pangea/dnd";
-import { Play, Plus, Trash2 } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Plus, Trash2 } from "lucide-react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 
 import { BoardCard } from "@/components/board-card";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/components/ui/cn";
 import { ColumnIndicator } from "@/components/ui/column-indicator";
 import type { RuntimeTaskSessionSummary } from "@/runtime/types";
 import { isCardDropDisabled, type ProgrammaticCardMoveInFlight } from "@/state/drag-rules";
@@ -39,6 +40,8 @@ export function BoardColumn({
 	isDependencyLinking,
 	workspacePath,
 	defaultClineModelId,
+	isCollapsed = false,
+	onCollapsedChange,
 }: {
 	column: BoardColumnModel;
 	taskSessions: Record<string, RuntimeTaskSessionSummary>;
@@ -69,6 +72,9 @@ export function BoardColumn({
 	isDependencyLinking?: boolean;
 	workspacePath?: string | null;
 	defaultClineModelId?: string | null;
+	isCollapsed?: boolean;
+	/** Makes the column collapsible: it folds into a narrow strip that still takes dropped cards. */
+	onCollapsedChange?: (collapsed: boolean) => void;
 }): React.ReactElement {
 	const canCreate = column.id === "backlog" && onCreateTask;
 	const canStartAllTasks = column.id === "backlog" && onStartAllTasks;
@@ -78,6 +84,23 @@ export function BoardColumn({
 		activeDragTaskId,
 		programmaticCardMoveInFlight,
 	});
+	// A card being edited inline must stay visible, so its column unfolds while the editor is open.
+	const isEditingCardInColumn =
+		column.id === "backlog" && editingTaskId != null && column.cards.some((card) => card.id === editingTaskId);
+	const collapseSide = column.id === "trash" ? "right" : "left";
+
+	if (onCollapsedChange && isCollapsed && !isEditingCardInColumn) {
+		return (
+			<CollapsedBoardColumn
+				column={column}
+				cardDropType={cardDropType}
+				isDropDisabled={isDropDisabled}
+				collapseSide={collapseSide}
+				onExpand={() => onCollapsedChange(false)}
+			/>
+		);
+	}
+
 	const createTaskButtonText = (
 		<span className="inline-flex items-center gap-1.5">
 			<span>Create task</span>
@@ -108,29 +131,41 @@ export function BoardColumn({
 						<span className="font-semibold text-sm">{column.title}</span>
 						<span className="text-text-secondary text-xs">{column.cards.length}</span>
 					</div>
-					{canStartAllTasks ? (
-						<Button
-							icon={<Play size={14} />}
-							variant="ghost"
-							size="sm"
-							onClick={onStartAllTasks}
-							disabled={column.cards.length === 0}
-							aria-label="Start all backlog tasks"
-							title={column.cards.length > 0 ? "Start all backlog tasks" : "Backlog is empty"}
-						/>
-					) : null}
-					{canClearTrash ? (
-						<Button
-							icon={<Trash2 size={14} />}
-							variant="ghost"
-							size="sm"
-							className="text-status-red hover:text-status-red"
-							onClick={onClearTrash}
-							disabled={column.cards.length === 0}
-							aria-label="Clear done"
-							title={column.cards.length > 0 ? "Clear done items permanently" : "Done is empty"}
-						/>
-					) : null}
+					<div className="flex items-center gap-0.5">
+						{canStartAllTasks ? (
+							<Button
+								icon={<Play size={14} />}
+								variant="ghost"
+								size="sm"
+								onClick={onStartAllTasks}
+								disabled={column.cards.length === 0}
+								aria-label="Start all backlog tasks"
+								title={column.cards.length > 0 ? "Start all backlog tasks" : "Backlog is empty"}
+							/>
+						) : null}
+						{canClearTrash ? (
+							<Button
+								icon={<Trash2 size={14} />}
+								variant="ghost"
+								size="sm"
+								className="text-status-red hover:text-status-red"
+								onClick={onClearTrash}
+								disabled={column.cards.length === 0}
+								aria-label="Clear done"
+								title={column.cards.length > 0 ? "Clear done items permanently" : "Done is empty"}
+							/>
+						) : null}
+						{onCollapsedChange ? (
+							<Button
+								icon={collapseSide === "right" ? <PanelRightClose size={14} /> : <PanelLeftClose size={14} />}
+								variant="ghost"
+								size="sm"
+								onClick={() => onCollapsedChange(true)}
+								aria-label={`Collapse ${column.title}`}
+								title={`Collapse ${column.title}`}
+							/>
+						) : null}
+					</div>
 				</div>
 
 				<Droppable droppableId={column.id} type={cardDropType} isDropDisabled={isDropDisabled}>
@@ -207,6 +242,55 @@ export function BoardColumn({
 					)}
 				</Droppable>
 			</div>
+		</section>
+	);
+}
+
+function CollapsedBoardColumn({
+	column,
+	cardDropType,
+	isDropDisabled,
+	collapseSide,
+	onExpand,
+}: {
+	column: BoardColumnModel;
+	cardDropType: string;
+	isDropDisabled: boolean;
+	collapseSide: "left" | "right";
+	onExpand: () => void;
+}): React.ReactElement {
+	return (
+		<section
+			data-column-id={column.id}
+			data-collapsed="true"
+			className="flex flex-col shrink-0 w-10 min-h-0 bg-surface-1 rounded-lg overflow-hidden border border-border"
+		>
+			{/* Still a drop target, so a card can be dragged into the column without unfolding it. */}
+			<Droppable droppableId={column.id} type={cardDropType} isDropDisabled={isDropDisabled}>
+				{(cardProvided, snapshot) => (
+					<div
+						ref={cardProvided.innerRef}
+						{...cardProvided.droppableProps}
+						className={cn("flex flex-1 min-h-0 flex-col", snapshot.isDraggingOver && "bg-surface-3")}
+					>
+						<button
+							type="button"
+							onClick={onExpand}
+							aria-label={`Expand ${column.title}`}
+							title={`Expand ${column.title}`}
+							className="flex flex-1 min-h-0 cursor-pointer flex-col items-center gap-2 border-none bg-transparent py-3 text-text-secondary hover:bg-surface-2 hover:text-text-primary"
+						>
+							{collapseSide === "right" ? <PanelRightOpen size={14} /> : <PanelLeftOpen size={14} />}
+							<ColumnIndicator columnId={column.id} />
+							<span className="text-xs">{column.cards.length}</span>
+							<span className="font-semibold text-sm text-text-primary [writing-mode:vertical-rl]">
+								{column.title}
+							</span>
+						</button>
+						<div className="h-0 overflow-hidden">{cardProvided.placeholder}</div>
+					</div>
+				)}
+			</Droppable>
 		</section>
 	);
 }
