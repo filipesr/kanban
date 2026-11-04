@@ -1,6 +1,6 @@
 import { Droppable } from "@hello-pangea/dnd";
 import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Plus, Trash2 } from "lucide-react";
-import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 
 import { BoardCard } from "@/components/board-card";
 import { Button } from "@/components/ui/button";
@@ -17,8 +17,6 @@ export function BoardColumn({
 	onStartTask,
 	onStartAllTasks,
 	onClearTrash,
-	editingTaskId,
-	inlineTaskEditor,
 	onEditTask,
 	onSaveTitle,
 	onCommitTask,
@@ -49,8 +47,6 @@ export function BoardColumn({
 	onStartTask?: (taskId: string) => void;
 	onStartAllTasks?: () => void;
 	onClearTrash?: () => void;
-	editingTaskId?: string | null;
-	inlineTaskEditor?: ReactNode;
 	onEditTask?: (card: BoardCardModel) => void;
 	onSaveTitle?: (taskId: string, title: string) => void;
 	onCommitTask?: (taskId: string) => void;
@@ -84,12 +80,9 @@ export function BoardColumn({
 		activeDragTaskId,
 		programmaticCardMoveInFlight,
 	});
-	// A card being edited inline must stay visible, so its column unfolds while the editor is open.
-	const isEditingCardInColumn =
-		column.id === "backlog" && editingTaskId != null && column.cards.some((card) => card.id === editingTaskId);
 	const collapseSide = column.id === "trash" ? "right" : "left";
 
-	if (onCollapsedChange && isCollapsed && !isEditingCardInColumn) {
+	if (onCollapsedChange && isCollapsed) {
 		return (
 			<CollapsedBoardColumn
 				column={column}
@@ -183,60 +176,39 @@ export function BoardColumn({
 								</Button>
 							) : null}
 
-							{(() => {
-								const items: ReactNode[] = [];
-								let draggableIndex = 0;
-								for (const card of column.cards) {
-									if (column.id === "backlog" && editingTaskId === card.id) {
-										items.push(
-											<div
-												key={card.id}
-												data-task-id={card.id}
-												data-column-id={column.id}
-												style={{ marginBottom: 6 }}
-											>
-												{inlineTaskEditor}
-											</div>,
-										);
-										continue;
-									}
-									items.push(
-										<BoardCard
-											key={card.id}
-											card={card}
-											index={draggableIndex}
-											columnId={column.id}
-											sessionSummary={taskSessions[card.id]}
-											onStart={onStartTask}
-											onMoveToTrash={onMoveToTrashTask}
-											onRestoreFromTrash={onRestoreFromTrashTask}
-											onCommit={onCommitTask}
-											onOpenPr={onOpenPrTask}
-											onCancelAutomaticAction={onCancelAutomaticTaskAction}
-											isCommitLoading={commitTaskLoadingById?.[card.id] ?? false}
-											isOpenPrLoading={openPrTaskLoadingById?.[card.id] ?? false}
-											isMoveToTrashLoading={moveToTrashLoadingById?.[card.id] ?? false}
-											onDependencyPointerDown={onDependencyPointerDown}
-											onDependencyPointerEnter={onDependencyPointerEnter}
-											isDependencySource={dependencySourceTaskId === card.id}
-											isDependencyTarget={dependencyTargetTaskId === card.id}
-											isDependencyLinking={isDependencyLinking}
-											workspacePath={workspacePath}
-											defaultClineModelId={defaultClineModelId}
-											onSaveTitle={onSaveTitle}
-											onClick={() => {
-												if (column.id === "backlog") {
-													onEditTask?.(card);
-													return;
-												}
-												onCardClick?.(card);
-											}}
-										/>,
-									);
-									draggableIndex += 1;
-								}
-								return items;
-							})()}
+							{column.cards.map((card, index) => (
+								<BoardCard
+									key={card.id}
+									card={card}
+									index={index}
+									columnId={column.id}
+									sessionSummary={taskSessions[card.id]}
+									onStart={onStartTask}
+									onMoveToTrash={onMoveToTrashTask}
+									onRestoreFromTrash={onRestoreFromTrashTask}
+									onCommit={onCommitTask}
+									onOpenPr={onOpenPrTask}
+									onCancelAutomaticAction={onCancelAutomaticTaskAction}
+									isCommitLoading={commitTaskLoadingById?.[card.id] ?? false}
+									isOpenPrLoading={openPrTaskLoadingById?.[card.id] ?? false}
+									isMoveToTrashLoading={moveToTrashLoadingById?.[card.id] ?? false}
+									onDependencyPointerDown={onDependencyPointerDown}
+									onDependencyPointerEnter={onDependencyPointerEnter}
+									isDependencySource={dependencySourceTaskId === card.id}
+									isDependencyTarget={dependencyTargetTaskId === card.id}
+									isDependencyLinking={isDependencyLinking}
+									workspacePath={workspacePath}
+									defaultClineModelId={defaultClineModelId}
+									onSaveTitle={onSaveTitle}
+									onClick={() => {
+										if (column.id === "backlog") {
+											onEditTask?.(card);
+											return;
+										}
+										onCardClick?.(card);
+									}}
+								/>
+							))}
 							{cardProvided.placeholder}
 						</div>
 					)}

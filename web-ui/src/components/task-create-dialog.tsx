@@ -41,6 +41,9 @@ const AUTO_REVIEW_MODE_OPTIONS: Array<{ value: TaskAutoReviewMode; label: string
 
 type TaskCreateStartAction = "start" | "start_and_open";
 
+/** "create" files new cards; "edit" rewrites an existing Backlog card and saves instead of creating. */
+export type TaskCreateDialogIntent = "create" | "edit";
+
 const DEFAULT_PRIMARY_START_ACTION: TaskCreateStartAction = "start";
 
 function normalizeStoredTaskCreateStartAction(value: string): TaskCreateStartAction | null {
@@ -98,6 +101,7 @@ function parseListItems(text: string): string[] {
 }
 
 export function TaskCreateDialog({
+	intent = "create",
 	open,
 	onOpenChange,
 	prompt,
@@ -131,6 +135,7 @@ export function TaskCreateDialog({
 	defaultModelId,
 	defaultReasoningEffort,
 }: {
+	intent?: TaskCreateDialogIntent;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	prompt: string;
@@ -139,7 +144,8 @@ export function TaskCreateDialog({
 	onImagesChange: Dispatch<SetStateAction<TaskImage[]>>;
 	onCreate: (options?: { keepDialogOpen?: boolean }) => string | null;
 	onCreateAndStart?: (options?: { keepDialogOpen?: boolean }) => string | null;
-	onCreateMultiple: (prompts: string[], options?: { keepDialogOpen?: boolean }) => string[];
+	/** Enables splitting a list prompt into several tasks. Ignored in edit mode. */
+	onCreateMultiple?: (prompts: string[], options?: { keepDialogOpen?: boolean }) => string[];
 	onCreateAndStartMultiple?: (prompts: string[], options?: { keepDialogOpen?: boolean }) => string[];
 	onCreateStartAndOpen?: (options?: { keepDialogOpen?: boolean }) => string | null;
 	startInPlanMode: boolean;
@@ -168,6 +174,8 @@ export function TaskCreateDialog({
 	/** Default Cline reasoning effort from runtimeConfig.clineProviderSettings.reasoningEffort */
 	defaultReasoningEffort?: RuntimeClineReasoningEffort | null;
 }): ReactElement {
+	const isEditing = intent === "edit";
+	const canSplitIntoTasks = !isEditing && Boolean(onCreateMultiple);
 	const [mode, setMode] = useState<"single" | "multi">("single");
 	const [createMore, setCreateMore] = useState(false);
 	const [composerResetKey, setComposerResetKey] = useState(0);
@@ -312,14 +320,18 @@ export function TaskCreateDialog({
 
 	const handleRunSingleStartAction = useCallback(
 		(action: TaskCreateStartAction) => {
-			setPrimaryStartAction(action);
+			// Only remember the choice when both start actions are offered, so a dialog
+			// without "Start and open" (edit mode) never overwrites the stored preference.
+			if (onCreateStartAndOpen) {
+				setPrimaryStartAction(action);
+			}
 			if (action === "start_and_open") {
 				handleCreateStartAndOpenSingle();
 				return;
 			}
 			handleCreateAndStartSingle();
 		},
-		[handleCreateAndStartSingle, handleCreateStartAndOpenSingle, setPrimaryStartAction],
+		[handleCreateAndStartSingle, handleCreateStartAndOpenSingle, onCreateStartAndOpen, setPrimaryStartAction],
 	);
 
 	const handleCreateAll = useCallback(() => {
@@ -327,7 +339,7 @@ export function TaskCreateDialog({
 		if (validPrompts.length === 0) {
 			return;
 		}
-		const createdTaskIds = onCreateMultiple(validPrompts, { keepDialogOpen: createMore });
+		const createdTaskIds = onCreateMultiple?.(validPrompts, { keepDialogOpen: createMore }) ?? [];
 		if (createMore && createdTaskIds.length > 0) {
 			resetForCreateMore();
 		}
@@ -424,12 +436,18 @@ export function TaskCreateDialog({
 		[open, mode, handleRunSingleStartAction, onCreateStartAndOpen],
 	);
 
-	const dialogTitle = mode === "multi" ? `New tasks${validTaskCount > 0 ? ` (${validTaskCount})` : ""}` : "New task";
+	const dialogTitle = isEditing
+		? "Edit task"
+		: mode === "multi"
+			? `New tasks${validTaskCount > 0 ? ` (${validTaskCount})` : ""}`
+			: "New task";
+	const submitLabel = isEditing ? "Save" : "Create";
 
 	const taskCountLabel = validTaskCount === 1 ? "task" : "tasks";
-	const primaryStartLabel = effectivePrimaryStartAction === "start" ? "Start task" : "Start and open";
+	const startTaskLabel = isEditing ? "Save and start" : "Start task";
+	const primaryStartLabel = effectivePrimaryStartAction === "start" ? startTaskLabel : "Start and open";
 	const primaryStartShortcutModifier = effectivePrimaryStartAction === "start" ? "mod" : "alt";
-	const secondaryStartLabel = secondaryStartAction === "start" ? "Start task" : "Start and open";
+	const secondaryStartLabel = secondaryStartAction === "start" ? startTaskLabel : "Start and open";
 	const secondaryStartShortcutModifier = secondaryStartAction === "start" ? "mod" : "alt";
 
 	return (
@@ -460,7 +478,7 @@ export function TaskCreateDialog({
 								</code>{" "}
 								to add images.
 							</p>
-							{detectedItems.length >= 2 ? (
+							{canSplitIntoTasks && detectedItems.length >= 2 ? (
 								<button
 									type="button"
 									onClick={handleSplitIntoTasks}
@@ -606,25 +624,27 @@ export function TaskCreateDialog({
 				</div>
 			</DialogBody>
 			<DialogFooter>
-				<label
-					htmlFor={createMoreId}
-					className="mr-auto flex items-center gap-2 text-[12px] text-text-primary cursor-pointer select-none"
-				>
-					<RadixSwitch.Root
-						id={createMoreId}
-						checked={createMore}
-						onCheckedChange={setCreateMore}
-						className="relative h-5 w-9 rounded-full bg-surface-4 data-[state=checked]:bg-accent cursor-pointer"
+				{isEditing ? null : (
+					<label
+						htmlFor={createMoreId}
+						className="mr-auto flex items-center gap-2 text-[12px] text-text-primary cursor-pointer select-none"
 					>
-						<RadixSwitch.Thumb className="block h-4 w-4 rounded-full bg-white shadow-sm transition-transform translate-x-0.5 data-[state=checked]:translate-x-[18px]" />
-					</RadixSwitch.Root>
-					<span>Create more</span>
-				</label>
+						<RadixSwitch.Root
+							id={createMoreId}
+							checked={createMore}
+							onCheckedChange={setCreateMore}
+							className="relative h-5 w-9 rounded-full bg-surface-4 data-[state=checked]:bg-accent cursor-pointer"
+						>
+							<RadixSwitch.Thumb className="block h-4 w-4 rounded-full bg-white shadow-sm transition-transform translate-x-0.5 data-[state=checked]:translate-x-[18px]" />
+						</RadixSwitch.Root>
+						<span>Create more</span>
+					</label>
+				)}
 				{mode === "single" ? (
 					<>
 						<Button size="sm" onClick={handleCreateSingle} disabled={!prompt.trim() || !branchRef}>
 							<span className="inline-flex items-center">
-								Create
+								{submitLabel}
 								<ButtonShortcut />
 							</span>
 						</Button>
@@ -634,7 +654,7 @@ export function TaskCreateDialog({
 									<Button
 										variant="primary"
 										size="sm"
-										onClick={() => handleRunSingleStartAction(primaryStartAction)}
+										onClick={() => handleRunSingleStartAction(effectivePrimaryStartAction)}
 										disabled={!prompt.trim() || !branchRef}
 										className={onCreateStartAndOpen ? "rounded-r-none" : undefined}
 									>

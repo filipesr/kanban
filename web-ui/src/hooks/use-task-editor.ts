@@ -86,7 +86,7 @@ export interface UseTaskEditorResult {
 	handleOpenEditTask: (task: BoardCard, options?: OpenEditTaskOptions) => void;
 	handleCancelEditTask: () => void;
 	handleSaveEditedTask: () => string | null;
-	handleSaveAndStartEditedTask: () => void;
+	handleSaveAndStartEditedTask: () => string | null;
 	handleSaveTaskTitle: (taskId: string, title: string) => void;
 	handleCreateTask: (options?: CreateTaskOptions) => string | null;
 	handleCreateTasks: (prompts: string[], options?: CreateTaskOptions) => string[];
@@ -297,7 +297,7 @@ export function useTaskEditor({
 				autoReviewMode: editTaskAutoReviewMode,
 				images: editTaskImages,
 				agentId: editTaskAgentId,
-				...fromCardAttributesDraft(editTaskAttributes),
+				attributes: fromCardAttributesDraft(editTaskAttributes),
 				clineSettings: editTaskClineSettings,
 				baseRef,
 			});
@@ -317,6 +317,7 @@ export function useTaskEditor({
 		return savedTaskId;
 	}, [
 		editTaskAgentId,
+		editTaskAttributes,
 		editTaskAutoReviewEnabled,
 		editTaskAutoReviewMode,
 		editTaskBranchRef,
@@ -329,12 +330,13 @@ export function useTaskEditor({
 		setBoard,
 	]);
 
-	const handleSaveAndStartEditedTask = useCallback(() => {
+	const handleSaveAndStartEditedTask = useCallback((): string | null => {
 		const taskId = handleSaveEditedTask();
 		if (!taskId) {
-			return;
+			return null;
 		}
 		queueTaskStartAfterEdit?.(taskId);
+		return taskId;
 	}, [handleSaveEditedTask, queueTaskStartAfterEdit]);
 
 	const handleSaveTaskTitle = useCallback(
@@ -366,7 +368,7 @@ export function useTaskEditor({
 				autoReviewMode: newTaskAutoReviewMode,
 				images: newTaskImages,
 				agentId: newTaskAgentId,
-				...fromCardAttributesDraft(newTaskAttributes),
+				attributes: fromCardAttributesDraft(newTaskAttributes),
 				clineSettings: newTaskClineSettings,
 				baseRef,
 			});
@@ -398,6 +400,7 @@ export function useTaskEditor({
 			board,
 			currentProjectId,
 			newTaskAgentId,
+			newTaskAttributes,
 			newTaskAutoReviewEnabled,
 			newTaskAutoReviewMode,
 			newTaskBranchRef,
@@ -433,8 +436,7 @@ export function useTaskEditor({
 					autoReviewMode: newTaskAutoReviewMode,
 					images: newTaskImages,
 					agentId: newTaskAgentId,
-					...fromCardAttributesDraft(newTaskAttributes),
-					...fromCardAttributesDraft(newTaskAttributes),
+					attributes: fromCardAttributesDraft(newTaskAttributes),
 					clineSettings: newTaskClineSettings,
 					baseRef,
 				});
@@ -471,6 +473,7 @@ export function useTaskEditor({
 			board,
 			currentProjectId,
 			newTaskAgentId,
+			newTaskAttributes,
 			newTaskAutoReviewEnabled,
 			newTaskAutoReviewMode,
 			newTaskBranchRef,

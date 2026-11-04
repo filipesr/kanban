@@ -4,6 +4,7 @@ import { createInitialBoardData } from "@/data/board-data";
 import {
 	addTaskDependency,
 	addTaskToColumn,
+	addTaskToColumnWithResult,
 	applyDragResult,
 	applyTaskDetailClineSettingsChange,
 	applyTaskDetailClineSettingsSelection,
@@ -13,6 +14,7 @@ import {
 	moveTaskToColumn,
 	normalizeBoardData,
 	trashTaskAndGetReadyLinkedTaskIds,
+	updateTask,
 	updateTaskTitle,
 } from "@/state/board-state";
 import type { ProgrammaticCardMoveInFlight } from "@/state/drag-rules";
@@ -942,5 +944,48 @@ describe("fields the board does not display", () => {
 		const card = board?.columns.find((column) => column.id === "backlog")?.cards[0];
 		expect(card?.tags).toBeUndefined();
 		expect(card?.priority).toBeUndefined();
+	});
+});
+
+describe("card attributes from the task form", () => {
+	it("keeps the tags, category and priority a new card was created with", () => {
+		const { task } = addTaskToColumnWithResult(createInitialBoardData(), "backlog", {
+			prompt: "Tag me",
+			baseRef: "main",
+			attributes: { tags: ["ui"], category: "web", priority: "high" },
+		});
+
+		expect(task.tags).toEqual(["ui"]);
+		expect(task.category).toBe("web");
+		expect(task.priority).toBe("high");
+	});
+
+	it("saves the attributes an edit sets, and clears the ones it empties", () => {
+		const { board, task } = addTaskToColumnWithResult(createInitialBoardData(), "backlog", {
+			prompt: "Tag me",
+			baseRef: "main",
+			attributes: { tags: ["ui"], category: "web", priority: "high" },
+		});
+
+		const edited = updateTask(board, task.id, { prompt: "Tag me", baseRef: "main", attributes: { tags: ["api"] } });
+		const card = edited.board.columns.find((column) => column.id === "backlog")?.cards[0];
+
+		expect(card?.tags).toEqual(["api"]);
+		expect(card?.category).toBeUndefined();
+		expect(card?.priority).toBeUndefined();
+	});
+
+	it("leaves the attributes alone when an update does not carry them", () => {
+		const { board, task } = addTaskToColumnWithResult(createInitialBoardData(), "backlog", {
+			prompt: "Tag me",
+			baseRef: "main",
+			attributes: { tags: ["ui"], priority: "high" },
+		});
+
+		const edited = updateTask(board, task.id, { prompt: "Retitled", baseRef: "main" });
+		const card = edited.board.columns.find((column) => column.id === "backlog")?.cards[0];
+
+		expect(card?.tags).toEqual(["ui"]);
+		expect(card?.priority).toBe("high");
 	});
 });

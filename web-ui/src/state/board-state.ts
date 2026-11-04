@@ -17,6 +17,7 @@ import {
 	type TaskAutoReviewMode,
 	type TaskImage,
 } from "@/types";
+import type { CardAttributesValue } from "@/utils/card-attributes-draft";
 
 export interface TaskDraft {
 	title?: string;
@@ -28,6 +29,11 @@ export interface TaskDraft {
 	agentId?: RuntimeAgentId;
 	clineSettings?: RuntimeTaskClineSettings;
 	baseRef: string;
+	/**
+	 * The task form's tags, category and priority. When present it replaces all three, so a field
+	 * left out is cleared; when absent the card keeps what it had.
+	 */
+	attributes?: CardAttributesValue;
 }
 
 export interface TaskMoveEvent {
@@ -381,6 +387,7 @@ export function addTaskToColumnWithResult(
 			agentId: draft.agentId,
 			clineSettings: draft.clineSettings,
 			baseRef: draft.baseRef,
+			...draft.attributes,
 			// Newest first: someone adding one card at a time should see it without scrolling.
 			// The shared default is arrival order, which is what batch creation means.
 			position: "top",
@@ -566,8 +573,9 @@ export function updateTask(board: BoardData, taskId: string, draft: TaskDraft): 
 			}
 			columnUpdated = true;
 			updated = true;
+			const { tags: _tags, category: _category, priority: _priority, ...cardWithoutAttributes } = card;
 			return {
-				...card,
+				...(draft.attributes ? { ...cardWithoutAttributes, ...draft.attributes } : card),
 				title: title || card.title,
 				prompt,
 				startInPlanMode: Boolean(draft.startInPlanMode),

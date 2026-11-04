@@ -52,7 +52,7 @@ interface HookSnapshot {
 	setNewTaskImages: (value: TaskImage[]) => void;
 	handleOpenEditTask: (task: BoardCard) => void;
 	handleSaveEditedTask: () => string | null;
-	handleSaveAndStartEditedTask: () => void;
+	handleSaveAndStartEditedTask: () => string | null;
 	setEditTaskPrompt: (value: string) => void;
 	setEditTaskAutoReviewEnabled: (value: boolean) => void;
 	setEditTaskAutoReviewMode: (value: TaskAutoReviewMode) => void;
@@ -283,10 +283,12 @@ describe("useTaskEditor", () => {
 			latestSnapshot?.setEditTaskPrompt("Updated prompt");
 		});
 
+		let startedTaskId: string | null = null;
 		await act(async () => {
-			latestSnapshot?.handleSaveAndStartEditedTask();
+			startedTaskId = latestSnapshot?.handleSaveAndStartEditedTask() ?? null;
 		});
 
+		expect(startedTaskId).toBe("task-1");
 		expect(queueTaskStartAfterEdit).toHaveBeenCalledWith("task-1");
 		expect(requireSnapshot(latestSnapshot).board.columns[0]?.cards[0]?.prompt).toBe("Updated prompt");
 	});

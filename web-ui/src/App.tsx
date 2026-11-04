@@ -19,7 +19,6 @@ import { ProjectsOverviewView } from "@/components/projects-overview/projects-ov
 import { RuntimeSettingsDialog, type RuntimeSettingsSection } from "@/components/runtime-settings-dialog";
 import { StartupOnboardingDialog } from "@/components/startup-onboarding-dialog";
 import { TaskCreateDialog } from "@/components/task-create-dialog";
-import { TaskInlineCreateCard } from "@/components/task-inline-create-card";
 import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import {
@@ -781,40 +780,14 @@ export default function App(): ReactElement {
 		[handleCancelCreateTask],
 	);
 
-	const inlineTaskEditor = editingTaskId ? (
-		<TaskInlineCreateCard
-			prompt={editTaskPrompt}
-			onPromptChange={setEditTaskPrompt}
-			images={editTaskImages}
-			onImagesChange={setEditTaskImages}
-			onCreate={handleSaveEditedTask}
-			onCreateAndStart={handleSaveAndStartEditedTask}
-			onCancel={handleCancelEditTask}
-			startInPlanMode={editTaskStartInPlanMode}
-			onStartInPlanModeChange={setEditTaskStartInPlanMode}
-			startInPlanModeDisabled={isEditTaskStartInPlanModeDisabled}
-			autoReviewEnabled={editTaskAutoReviewEnabled}
-			onAutoReviewEnabledChange={setEditTaskAutoReviewEnabled}
-			autoReviewMode={editTaskAutoReviewMode}
-			onAutoReviewModeChange={setEditTaskAutoReviewMode}
-			attributes={editTaskAttributes}
-			onAttributesChange={setEditTaskAttributes}
-			workspaceId={currentProjectId}
-			branchRef={editTaskBranchRef}
-			branchOptions={createTaskBranchOptions}
-			onBranchRefChange={setEditTaskBranchRef}
-			agentId={editTaskAgentId}
-			onAgentIdChange={setEditTaskAgentId}
-			clineSettings={editTaskClineSettings}
-			onClineSettingsChange={setEditTaskClineSettings}
-			defaultAgentId={runtimeProjectConfig?.selectedAgentId ?? null}
-			defaultProviderId={defaultTaskClineProviderId}
-			defaultModelId={runtimeProjectConfig?.clineProviderSettings?.modelId ?? null}
-			defaultReasoningEffort={runtimeProjectConfig?.clineProviderSettings?.reasoningEffort ?? null}
-			mode="edit"
-			idPrefix={`inline-edit-task-${editingTaskId}`}
-		/>
-	) : undefined;
+	const handleEditDialogOpenChange = useCallback(
+		(open: boolean) => {
+			if (!open) {
+				handleCancelEditTask();
+			}
+		},
+		[handleCancelEditTask],
+	);
 
 	if (isRuntimeDisconnected) {
 		return <RuntimeDisconnectedFallback />;
@@ -989,8 +962,6 @@ export default function App(): ReactElement {
 												onStartTask={handleStartTaskFromBoard}
 												onStartAllTasks={handleStartAllBacklogTasksFromBoard}
 												onClearTrash={handleOpenClearTrash}
-												editingTaskId={editingTaskId}
-												inlineTaskEditor={inlineTaskEditor}
 												onEditTask={handleOpenEditTask}
 												onSaveTaskTitle={handleSaveTaskTitle}
 												onCommitTask={handleCommitTask}
@@ -1072,8 +1043,6 @@ export default function App(): ReactElement {
 									onStartTask={handleStartTaskFromBoard}
 									onStartAllTasks={handleStartAllBacklogTasksFromBoard}
 									onClearTrash={handleOpenClearTrash}
-									editingTaskId={editingTaskId}
-									inlineTaskEditor={inlineTaskEditor}
 									onEditTask={(task) => {
 										handleOpenEditTask(task, { preserveDetailSelection: true });
 									}}
@@ -1184,6 +1153,38 @@ export default function App(): ReactElement {
 					onAgentIdChange={setNewTaskAgentId}
 					clineSettings={newTaskClineSettings}
 					onClineSettingsChange={setNewTaskClineSettings}
+					defaultAgentId={runtimeProjectConfig?.selectedAgentId ?? null}
+					defaultProviderId={defaultTaskClineProviderId}
+					defaultModelId={runtimeProjectConfig?.clineProviderSettings?.modelId ?? null}
+					defaultReasoningEffort={runtimeProjectConfig?.clineProviderSettings?.reasoningEffort ?? null}
+				/>
+				<TaskCreateDialog
+					intent="edit"
+					open={editingTaskId !== null}
+					onOpenChange={handleEditDialogOpenChange}
+					prompt={editTaskPrompt}
+					onPromptChange={setEditTaskPrompt}
+					images={editTaskImages}
+					onImagesChange={setEditTaskImages}
+					onCreate={handleSaveEditedTask}
+					onCreateAndStart={handleSaveAndStartEditedTask}
+					startInPlanMode={editTaskStartInPlanMode}
+					onStartInPlanModeChange={setEditTaskStartInPlanMode}
+					startInPlanModeDisabled={isEditTaskStartInPlanModeDisabled}
+					autoReviewEnabled={editTaskAutoReviewEnabled}
+					onAutoReviewEnabledChange={setEditTaskAutoReviewEnabled}
+					autoReviewMode={editTaskAutoReviewMode}
+					onAutoReviewModeChange={setEditTaskAutoReviewMode}
+					attributes={editTaskAttributes}
+					onAttributesChange={setEditTaskAttributes}
+					workspaceId={currentProjectId}
+					branchRef={editTaskBranchRef}
+					branchOptions={createTaskBranchOptions}
+					onBranchRefChange={setEditTaskBranchRef}
+					agentId={editTaskAgentId}
+					onAgentIdChange={setEditTaskAgentId}
+					clineSettings={editTaskClineSettings}
+					onClineSettingsChange={setEditTaskClineSettings}
 					defaultAgentId={runtimeProjectConfig?.selectedAgentId ?? null}
 					defaultProviderId={defaultTaskClineProviderId}
 					defaultModelId={runtimeProjectConfig?.clineProviderSettings?.modelId ?? null}

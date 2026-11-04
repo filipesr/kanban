@@ -18,7 +18,11 @@ vi.mock("@hello-pangea/dnd", () => ({
 }));
 
 vi.mock("@/components/board-card", () => ({
-	BoardCard: ({ card }: { card: BoardCard }): React.ReactElement => <div data-task-id={card.id}>{card.title}</div>,
+	BoardCard: ({ card, onClick }: { card: BoardCard; onClick?: () => void }): React.ReactElement => (
+		<button type="button" data-task-id={card.id} onClick={onClick}>
+			{card.title}
+		</button>
+	),
 }));
 
 function createCard(id: string, title: string): BoardCard {
@@ -100,16 +104,32 @@ describe("BoardColumn collapsing", () => {
 		expect(onCollapsedChange).toHaveBeenCalledWith(false);
 	});
 
-	it("stays open while one of its backlog cards is being edited", () => {
+	it("asks to edit a backlog card when it is clicked", () => {
+		const draft = createCard("task-3", "Draft");
+		const onEditTask = vi.fn();
+		const onCardClick = vi.fn();
+		renderColumn({
+			column: { id: "backlog", title: "Backlog", cards: [draft] },
+			onEditTask,
+			onCardClick,
+		});
+
+		act(() => {
+			(container.querySelector('[data-task-id="task-3"]') as HTMLButtonElement).click();
+		});
+
+		expect(onEditTask).toHaveBeenCalledWith(draft);
+		expect(onCardClick).not.toHaveBeenCalled();
+	});
+
+	it("keeps a collapsed backlog folded, since editing happens in a dialog", () => {
 		renderColumn({
 			column: { id: "backlog", title: "Backlog", cards: [createCard("task-3", "Draft")] },
 			isCollapsed: true,
 			onCollapsedChange: vi.fn(),
-			editingTaskId: "task-3",
-			inlineTaskEditor: <div>inline editor</div>,
 		});
 
-		expect(container.querySelector("section")?.getAttribute("data-collapsed")).toBeNull();
-		expect(container.textContent).toContain("inline editor");
+		expect(container.querySelector('section[data-column-id="backlog"]')?.getAttribute("data-collapsed")).toBe("true");
+		expect(container.querySelector("[data-task-id]")).toBeNull();
 	});
 });
