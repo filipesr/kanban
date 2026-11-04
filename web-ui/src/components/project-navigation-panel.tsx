@@ -10,6 +10,8 @@ import {
 	Info,
 	LayoutGrid,
 	Lightbulb,
+	PanelLeftClose,
+	PanelLeftOpen,
 	Plus,
 	X,
 } from "lucide-react";
@@ -249,18 +251,13 @@ export function ProjectNavigationPanel({
 						className="absolute top-0 right-0 bottom-0 w-1.5 cursor-ew-resize z-10"
 					/>
 				)}
-				{onOpenOverview && sortedProjects.length > 0 ? (
+				{!isMobile ? (
 					<CollapsedViewButton
-						label="All projects"
-						icon={<LayoutGrid size={16} />}
-						isActive={isOverviewActive}
+						label="Expand sidebar"
+						icon={<PanelLeftOpen size={16} />}
+						isActive={false}
 						isMobile={isMobile}
-						onClick={() => {
-							if (isMobile) {
-								setCollapsed(false);
-							}
-							onOpenOverview();
-						}}
+						onClick={() => setCollapsed(false)}
 					/>
 				) : null}
 				{onOpenDashboard && sortedProjects.length > 0 ? (
@@ -274,6 +271,20 @@ export function ProjectNavigationPanel({
 								setCollapsed(false);
 							}
 							onOpenDashboard();
+						}}
+					/>
+				) : null}
+				{onOpenOverview && sortedProjects.length > 0 ? (
+					<CollapsedViewButton
+						label="All projects"
+						icon={<LayoutGrid size={16} />}
+						isActive={isOverviewActive}
+						isMobile={isMobile}
+						onClick={() => {
+							if (isMobile) {
+								setCollapsed(false);
+							}
+							onOpenOverview();
 						}}
 					/>
 				) : null}
@@ -366,7 +377,17 @@ export function ProjectNavigationPanel({
 							aria-label="Close sidebar"
 							className="min-w-[44px] min-h-[44px] -mr-2"
 						/>
-					) : null}
+					) : (
+						<Button
+							variant="ghost"
+							size="sm"
+							icon={<PanelLeftClose size={16} />}
+							onClick={() => setCollapsed(true)}
+							aria-label="Collapse sidebar"
+							title="Collapse sidebar"
+							className="-mr-1"
+						/>
+					)}
 				</div>
 				<div className="mt-2 rounded-md bg-surface-2 border border-border p-1">
 					<div className="grid grid-cols-2 gap-1">
@@ -414,31 +435,35 @@ export function ProjectNavigationPanel({
 							</div>
 						) : null}
 
-						{onOpenOverview && sortedProjects.length > 0 ? (
-							<ViewRow
-								label="All projects"
-								icon={<LayoutGrid size={14} className="shrink-0" />}
-								isActive={isOverviewActive}
-								onClick={() => {
-									onOpenOverview();
-									if (isMobile) {
-										setCollapsed(true);
-									}
-								}}
-							/>
-						) : null}
-						{onOpenDashboard && sortedProjects.length > 0 ? (
-							<ViewRow
-								label="Dashboard"
-								icon={<ChartColumn size={14} className="shrink-0" />}
-								isActive={isDashboardActive}
-								onClick={() => {
-									onOpenDashboard();
-									if (isMobile) {
-										setCollapsed(true);
-									}
-								}}
-							/>
+						{sortedProjects.length > 0 && (onOpenDashboard || onOpenOverview) ? (
+							<div className="grid grid-cols-2 gap-1">
+								{onOpenDashboard ? (
+									<ViewRow
+										label="Dashboard"
+										icon={<ChartColumn size={14} className="shrink-0" />}
+										isActive={isDashboardActive}
+										onClick={() => {
+											onOpenDashboard();
+											if (isMobile) {
+												setCollapsed(true);
+											}
+										}}
+									/>
+								) : null}
+								{onOpenOverview ? (
+									<ViewRow
+										label="All projects"
+										icon={<LayoutGrid size={14} className="shrink-0" />}
+										isActive={isOverviewActive}
+										onClick={() => {
+											onOpenOverview();
+											if (isMobile) {
+												setCollapsed(true);
+											}
+										}}
+									/>
+								) : null}
+							</div>
 						) : null}
 
 						{sortedProjects.length > 0 || !isLoadingProjects ? (
@@ -997,7 +1022,7 @@ function CollapsedViewButton({
 	);
 }
 
-/** A whole-app view (not a project) in the expanded sidebar, above the project rows. */
+/** A whole-app view (not a project) in the expanded sidebar, side by side above the project rows. */
 function ViewRow({
 	label,
 	icon,
@@ -1014,14 +1039,14 @@ function ViewRow({
 			type="button"
 			aria-current={isActive ? "page" : undefined}
 			className={cn(
-				"kb-project-row flex cursor-pointer items-center gap-1.5 rounded-md",
+				"kb-project-row flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md",
 				isActive ? "kb-project-row-selected text-accent-fg" : "text-text-primary",
 			)}
 			style={{ padding: "6px 8px" }}
 			onClick={onClick}
 		>
 			{icon}
-			<span className="text-sm font-medium">{label}</span>
+			<span className="truncate text-sm font-medium">{label}</span>
 		</button>
 	);
 }

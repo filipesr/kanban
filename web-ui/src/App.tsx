@@ -43,6 +43,7 @@ import { useDocumentVisibility } from "@/hooks/use-document-visibility";
 import { useFeaturebaseFeedbackWidget } from "@/hooks/use-featurebase-feedback-widget";
 import { useGitActions } from "@/hooks/use-git-actions";
 import { useHomeSidebarAgentPanel } from "@/hooks/use-home-sidebar-agent-panel";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useKanbanAccessGate } from "@/hooks/use-kanban-access-gate";
 import { useOpenWorkspace } from "@/hooks/use-open-workspace";
 import { parseRemovedProjectPathFromStreamError, useProjectNavigation } from "@/hooks/use-project-navigation";
@@ -710,6 +711,14 @@ export default function App(): ReactElement {
 	const handleToggleSidebar = useCallback(() => {
 		sidebarLayout.setSidebarCollapsed(!sidebarLayout.isCollapsed);
 	}, [sidebarLayout]);
+	const isMobile = useIsMobile();
+	const { setSidebarCollapsed } = sidebarLayout;
+	useEffect(() => {
+		// On mobile the sidebar is a full-screen drawer, so it must never cover a task that just opened.
+		if (isMobile && selectedTaskId) {
+			setSidebarCollapsed(true, false);
+		}
+	}, [isMobile, selectedTaskId, setSidebarCollapsed]);
 
 	const navbarWorkspacePath = hasNoProjects ? undefined : activeWorkspacePath;
 	const navbarWorkspaceHint = hasNoProjects ? undefined : activeWorkspaceHint;
@@ -799,49 +808,50 @@ export default function App(): ReactElement {
 	return (
 		<LayoutCustomizationsProvider onResetBottomTerminalLayoutCustomizations={resetBottomTerminalLayoutCustomizations}>
 			<div className="flex h-[100svh] min-w-0 overflow-hidden">
-				{!selectedCard ? (
-					<ProjectNavigationPanel
-						projects={displayedProjects}
-						isLoadingProjects={isProjectListLoading}
-						currentProjectId={isOverviewOpen || isDashboardOpen ? null : navigationCurrentProjectId}
-						isOverviewActive={isOverviewOpen}
-						onOpenOverview={() => {
-							setIsGitHistoryOpen(false);
-							setIsDashboardOpen(false);
-							openOverview();
-						}}
-						isDashboardActive={isDashboardOpen}
-						onOpenDashboard={() => {
-							setIsGitHistoryOpen(false);
-							closeOverview();
-							setIsDashboardOpen(true);
-						}}
-						removingProjectId={removingProjectId}
-						activeSection={homeSidebarSection}
-						onActiveSectionChange={setHomeSidebarSection}
-						canShowAgentSection={!hasNoProjects && Boolean(currentProjectId)}
-						agentSectionContent={homeSidebarAgentPanel}
-						selectedAgentId={settingsRuntimeProjectConfig?.selectedAgentId ?? null}
-						clineProviderSettings={settingsRuntimeProjectConfig?.clineProviderSettings ?? null}
-						featurebaseFeedbackState={featurebaseFeedbackState}
-						onSelectProject={(projectId) => {
-							closeOverview();
-							setIsDashboardOpen(false);
-							void handleSelectProject(projectId);
-						}}
-						onRemoveProject={handleRemoveProject}
-						onAddProject={() => {
-							void handleAddProject();
-						}}
-						sidebarWidth={sidebarLayout.sidebarWidth}
-						setExpandedSidebarWidth={sidebarLayout.setExpandedSidebarWidth}
-						isCollapsed={sidebarLayout.isCollapsed}
-						setSidebarCollapsed={sidebarLayout.setSidebarCollapsed}
-					/>
-				) : null}
+				<ProjectNavigationPanel
+					projects={displayedProjects}
+					isLoadingProjects={isProjectListLoading}
+					currentProjectId={isOverviewOpen || isDashboardOpen ? null : navigationCurrentProjectId}
+					isOverviewActive={isOverviewOpen}
+					onOpenOverview={() => {
+						handleBack();
+						setIsGitHistoryOpen(false);
+						setIsDashboardOpen(false);
+						openOverview();
+					}}
+					isDashboardActive={isDashboardOpen}
+					onOpenDashboard={() => {
+						handleBack();
+						setIsGitHistoryOpen(false);
+						closeOverview();
+						setIsDashboardOpen(true);
+					}}
+					removingProjectId={removingProjectId}
+					activeSection={homeSidebarSection}
+					onActiveSectionChange={setHomeSidebarSection}
+					canShowAgentSection={!hasNoProjects && Boolean(currentProjectId)}
+					agentSectionContent={homeSidebarAgentPanel}
+					selectedAgentId={settingsRuntimeProjectConfig?.selectedAgentId ?? null}
+					clineProviderSettings={settingsRuntimeProjectConfig?.clineProviderSettings ?? null}
+					featurebaseFeedbackState={featurebaseFeedbackState}
+					onSelectProject={(projectId) => {
+						handleBack();
+						closeOverview();
+						setIsDashboardOpen(false);
+						void handleSelectProject(projectId);
+					}}
+					onRemoveProject={handleRemoveProject}
+					onAddProject={() => {
+						void handleAddProject();
+					}}
+					sidebarWidth={sidebarLayout.sidebarWidth}
+					setExpandedSidebarWidth={sidebarLayout.setExpandedSidebarWidth}
+					isCollapsed={sidebarLayout.isCollapsed}
+					setSidebarCollapsed={sidebarLayout.setSidebarCollapsed}
+				/>
 				<div className="flex flex-col flex-1 min-w-0 overflow-hidden">
 					<TopBar
-						onToggleSidebar={!selectedCard ? handleToggleSidebar : undefined}
+						onToggleSidebar={handleToggleSidebar}
 						onBack={selectedCard ? handleBack : undefined}
 						workspacePath={navbarWorkspacePath}
 						isWorkspacePathLoading={shouldShowProjectLoadingState}

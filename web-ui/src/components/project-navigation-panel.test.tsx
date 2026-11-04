@@ -271,4 +271,59 @@ describe("ProjectNavigationPanel width persistence", () => {
 		expect(container.textContent).toContain("Toggle terminal");
 		expect(localStorage.getItem(LocalStorageKey.ProjectNavigationShortcutsCollapsed)).toBe("false");
 	});
+
+	function getButtonByLabel(label: string): HTMLButtonElement {
+		const button = container.querySelector(`button[aria-label="${label}"]`);
+		if (!(button instanceof HTMLButtonElement)) {
+			throw new Error(`Button labelled "${label}" was not rendered`);
+		}
+		return button;
+	}
+
+	it("puts Dashboard and All projects side by side, Dashboard first", () => {
+		const onOpenDashboard = vi.fn();
+		const onOpenOverview = vi.fn();
+		renderPanel({ onOpenDashboard, onOpenOverview, isDashboardActive: true });
+
+		const dashboardButton = getButtonByText(container, "Dashboard");
+		const overviewButton = getButtonByText(container, "All projects");
+		expect(dashboardButton.parentElement).toBe(overviewButton.parentElement);
+		expect(Array.from(dashboardButton.parentElement?.children ?? [])).toEqual([dashboardButton, overviewButton]);
+		expect(dashboardButton.getAttribute("aria-current")).toBe("page");
+		expect(overviewButton.getAttribute("aria-current")).toBeNull();
+
+		act(() => {
+			overviewButton.click();
+		});
+		expect(onOpenOverview).toHaveBeenCalledTimes(1);
+		expect(onOpenDashboard).not.toHaveBeenCalled();
+	});
+
+	it("collapses and expands from its own button and remembers it", () => {
+		renderPanel({ onOpenDashboard: () => {}, onOpenOverview: () => {} });
+
+		act(() => {
+			getButtonByLabel("Collapse sidebar").click();
+		});
+		expect(getSidebar(container).style.width).toBe("48px");
+		expect(localStorage.getItem(LocalStorageKey.ProjectNavigationPanelCollapsed)).toBe("true");
+
+		const collapsedLabels = Array.from(container.querySelectorAll("aside button[aria-label]")).map((button) =>
+			button.getAttribute("aria-label"),
+		);
+		expect(collapsedLabels).toEqual(["Expand sidebar", "Dashboard", "All projects"]);
+
+		act(() => {
+			root.unmount();
+		});
+		root = createRoot(container);
+		renderPanel();
+		expect(getSidebar(container).style.width).toBe("48px");
+
+		act(() => {
+			getButtonByLabel("Expand sidebar").click();
+		});
+		expect(getSidebar(container).style.width).toBe(`${getExpectedDefaultWidthPx(window.innerWidth)}px`);
+		expect(localStorage.getItem(LocalStorageKey.ProjectNavigationPanelCollapsed)).toBe("false");
+	});
 });
