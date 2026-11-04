@@ -33,7 +33,6 @@ export const PROJECTS_OVERVIEW_COLUMNS: ReadonlyArray<{ id: RuntimeBoardColumnId
 	{ id: "backlog", title: "Backlog" },
 	{ id: "in_progress", title: "In Progress" },
 	{ id: "review", title: "Review" },
-	{ id: "trash", title: "Done" },
 ];
 
 /**

@@ -30,18 +30,17 @@ export interface UseProjectsOverviewBoardResult {
 export function useProjectsOverviewBoard(data: ProjectsOverviewData | null): UseProjectsOverviewBoardResult {
 	const [filters, setFilters] = useState<ProjectsOverviewFilters>(EMPTY_PROJECTS_OVERVIEW_FILTERS);
 	const [sort, setSort] = useState<ProjectsOverviewSort>("priority");
-	const cards = data?.cards;
+	// The overview is for work still open, so finished cards stay out of it, filters and facets included.
+	const cards = useMemo(() => (data?.cards ?? []).filter((card) => card.column !== "trash"), [data?.cards]);
 
-	const facets = useMemo(() => collectOverviewFacets(cards ?? []), [cards]);
+	const facets = useMemo(() => collectOverviewFacets(cards), [cards]);
 
-	const cardsByColumn = useMemo(() => {
-		const grouped = groupOverviewCardsByColumn(sortOverviewCards(filterOverviewCards(cards ?? [], filters), sort));
-		// Done is a record, not a queue: what finished last is what someone comes back to check.
-		grouped.trash = sortOverviewCards(grouped.trash, "updated");
-		return grouped;
-	}, [cards, filters, sort]);
+	const cardsByColumn = useMemo(
+		() => groupOverviewCardsByColumn(sortOverviewCards(filterOverviewCards(cards, filters), sort)),
+		[cards, filters, sort],
+	);
 
-	const needsAttentionCount = useMemo(() => (cards ?? []).filter(cardNeedsAttention).length, [cards]);
+	const needsAttentionCount = useMemo(() => cards.filter(cardNeedsAttention).length, [cards]);
 
 	const hasActiveFilters =
 		filters.projectId !== null ||

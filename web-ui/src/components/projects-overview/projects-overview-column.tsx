@@ -1,12 +1,9 @@
-import { useState } from "react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
 import { ProjectsOverviewCard } from "@/components/projects-overview/projects-overview-card";
 import { Button } from "@/components/ui/button";
 import { ColumnIndicator } from "@/components/ui/column-indicator";
 import type { RuntimeBoardColumnId, RuntimeProjectsOverviewCard } from "@/runtime/types";
-
-/** Done keeps growing forever; the overview shows what finished lately and folds the rest. */
-export const OVERVIEW_DONE_VISIBLE_LIMIT = 10;
 
 export function ProjectsOverviewColumn({
 	columnId,
@@ -14,16 +11,41 @@ export function ProjectsOverviewColumn({
 	cards,
 	projectNameById,
 	onOpenCard,
+	isCollapsed = false,
+	onCollapsedChange,
 }: {
 	columnId: RuntimeBoardColumnId;
 	title: string;
 	cards: RuntimeProjectsOverviewCard[];
 	projectNameById: ReadonlyMap<string, string>;
 	onOpenCard: (card: RuntimeProjectsOverviewCard) => void;
+	isCollapsed?: boolean;
+	/** Makes the column collapsible: it folds into a narrow strip showing its title and count. */
+	onCollapsedChange?: (collapsed: boolean) => void;
 }): React.ReactElement {
-	const [isExpanded, setIsExpanded] = useState(false);
-	const isLimited = columnId === "trash" && !isExpanded && cards.length > OVERVIEW_DONE_VISIBLE_LIMIT;
-	const visibleCards = isLimited ? cards.slice(0, OVERVIEW_DONE_VISIBLE_LIMIT) : cards;
+	if (onCollapsedChange && isCollapsed) {
+		return (
+			<section
+				data-overview-column={columnId}
+				data-collapsed="true"
+				aria-label={title}
+				className="flex min-h-0 w-10 shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-surface-1"
+			>
+				<button
+					type="button"
+					onClick={() => onCollapsedChange(false)}
+					aria-label={`Expand ${title}`}
+					title={`Expand ${title}`}
+					className="flex flex-1 min-h-0 cursor-pointer flex-col items-center gap-2 border-none bg-transparent py-3 text-text-secondary hover:bg-surface-2 hover:text-text-primary"
+				>
+					<PanelLeftOpen size={14} />
+					<ColumnIndicator columnId={columnId} />
+					<span className="text-xs">{cards.length}</span>
+					<span className="text-sm font-semibold text-text-primary [writing-mode:vertical-rl]">{title}</span>
+				</button>
+			</section>
+		);
+	}
 
 	return (
 		<section
@@ -35,12 +57,23 @@ export function ProjectsOverviewColumn({
 				<ColumnIndicator columnId={columnId} />
 				<span className="text-sm font-semibold">{title}</span>
 				<span className="text-xs text-text-secondary">{cards.length}</span>
+				{onCollapsedChange ? (
+					<Button
+						icon={<PanelLeftClose size={14} />}
+						variant="ghost"
+						size="sm"
+						className="ml-auto"
+						onClick={() => onCollapsedChange(true)}
+						aria-label={`Collapse ${title}`}
+						title={`Collapse ${title}`}
+					/>
+				) : null}
 			</div>
 			<div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overscroll-contain px-2 pb-2">
-				{visibleCards.length === 0 ? (
+				{cards.length === 0 ? (
 					<div className="px-1 py-6 text-center text-xs text-text-tertiary">Nothing here</div>
 				) : (
-					visibleCards.map((card) => (
+					cards.map((card) => (
 						<ProjectsOverviewCard
 							key={`${card.projectId}:${card.taskId}`}
 							card={card}
@@ -49,11 +82,6 @@ export function ProjectsOverviewColumn({
 						/>
 					))
 				)}
-				{columnId === "trash" && cards.length > OVERVIEW_DONE_VISIBLE_LIMIT ? (
-					<Button variant="ghost" size="sm" fill onClick={() => setIsExpanded((current) => !current)}>
-						{isExpanded ? "Show recent only" : `Show all ${cards.length}`}
-					</Button>
-				) : null}
 			</div>
 		</section>
 	);

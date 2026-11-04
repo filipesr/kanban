@@ -58,7 +58,8 @@ const BASE_CARDS = [
 		pendingQuestion: "Which database? 1) Postgres 2) SQLite",
 	}),
 	overviewCard({ taskId: "a2", projectId: "api", column: "in_progress", title: "Add endpoint", status: "running" }),
-	overviewCard({ taskId: "w2", column: "trash", title: "Old cleanup", category: "chore" }),
+	overviewCard({ taskId: "w2", column: "review", title: "Tidy styles", category: "chore" }),
+	overviewCard({ taskId: "w3", column: "trash", title: "Old cleanup", tags: ["legacy"], category: "archive" }),
 ];
 
 async function flush(ms = 0) {
@@ -77,6 +78,7 @@ describe("ProjectsOverviewView", () => {
 		document.body.appendChild(container);
 		root = createRoot(container);
 		mockOverviewQuery.mockReset();
+		window.localStorage.clear();
 	});
 
 	afterEach(() => {
@@ -147,13 +149,25 @@ describe("ProjectsOverviewView", () => {
 
 		expect(cardIdsIn("backlog")).toEqual(["w1"]);
 		expect(cardIdsIn("in_progress")).toEqual(["a2"]);
-		expect(cardIdsIn("review")).toEqual(["a1"]);
-		expect(cardIdsIn("trash")).toEqual(["w2"]);
+		expect(cardIdsIn("review").sort()).toEqual(["a1", "w2"]);
 		const asking = container.querySelector('[data-overview-card="a1"]');
 		expect(asking?.textContent).toContain("api");
 		expect(asking?.textContent).toContain("Waiting on your answer");
 		expect(asking?.textContent).toContain("Which database? 1) Postgres 2) SQLite");
 		expect(container.querySelector('[data-overview-card="a2"]')?.textContent).toContain("Running");
+	});
+
+	it("leaves finished cards out, with no Done column and no filters only they would use", async () => {
+		mockOverviewQuery.mockResolvedValue(overview(BASE_CARDS));
+		render();
+		await flush();
+
+		expect(container.querySelector('[data-overview-column="trash"]')).toBeNull();
+		expect(visibleCardIds()).not.toContain("w3");
+		const tagOptions = Array.from(
+			container.querySelectorAll<HTMLOptionElement>('select[aria-label="Tag"] option'),
+		).map((option) => option.value);
+		expect(tagOptions).not.toContain("legacy");
 	});
 
 	it("narrows to what needs the person, and by project, priority, tag and category", async () => {
@@ -195,21 +209,33 @@ describe("ProjectsOverviewView", () => {
 		expect(cardIdsIn("backlog")).toEqual(["none-newest", "low-recent", "high-old"]);
 	});
 
-	it("shows only the latest done cards until asked for all of them", async () => {
-		mockOverviewQuery.mockResolvedValue(
-			overview(
-				Array.from({ length: 12 }, (_, index) =>
-					overviewCard({ taskId: `d${index}`, column: "trash", updatedAt: index }),
-				),
-			),
-		);
+	it("folds Backlog into a strip and remembers it after a reload", async () => {
+		mockOverviewQuery.mockResolvedValue(overview(BASE_CARDS));
 		render();
 		await flush();
 
-		expect(cardIdsIn("trash")).toHaveLength(10);
-		expect(cardIdsIn("trash")[0]).toBe("d11");
-		clickButton("Show all 12");
-		expect(cardIdsIn("trash")).toHaveLength(12);
+		act(() => {
+			container.querySelector<HTMLButtonElement>('button[aria-label="Collapse Backlog"]')?.click();
+		});
+		const strip = container.querySelector('[data-overview-column="backlog"]');
+		expect(strip?.getAttribute("data-collapsed")).toBe("true");
+		expect(strip?.textContent).toContain("Backlog");
+		expect(strip?.textContent).toContain("1");
+		expect(cardIdsIn("backlog")).toEqual([]);
+
+		act(() => {
+			root.unmount();
+		});
+		root = createRoot(container);
+		render();
+		await flush();
+		expect(container.querySelector('[data-overview-column="backlog"]')?.getAttribute("data-collapsed")).toBe("true");
+
+		act(() => {
+			container.querySelector<HTMLButtonElement>('button[aria-label="Expand Backlog"]')?.click();
+		});
+		expect(container.querySelector('[data-overview-column="backlog"]')?.hasAttribute("data-collapsed")).toBe(false);
+		expect(cardIdsIn("backlog")).toEqual(["w1"]);
 	});
 
 	it("opens the clicked card", async () => {

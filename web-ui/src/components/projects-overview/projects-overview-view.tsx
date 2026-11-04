@@ -6,7 +6,9 @@ import { Spinner } from "@/components/ui/spinner";
 import { useProjectsOverview } from "@/hooks/use-projects-overview";
 import { useProjectsOverviewBoard } from "@/hooks/use-projects-overview-board";
 import type { RuntimeProjectsOverviewCard } from "@/runtime/types";
+import { LocalStorageKey } from "@/storage/local-storage-store";
 import { PROJECTS_OVERVIEW_COLUMNS } from "@/utils/projects-overview";
+import { useBooleanLocalStorageValue } from "@/utils/react-use";
 
 export function ProjectsOverviewView({
 	invalidationVersions,
@@ -19,6 +21,10 @@ export function ProjectsOverviewView({
 }): React.ReactElement {
 	const overview = useProjectsOverview({ enabled: true, invalidationVersions, projectIds });
 	const board = useProjectsOverviewBoard(overview.data);
+	const [isBacklogCollapsed, setBacklogCollapsed] = useBooleanLocalStorageValue(
+		LocalStorageKey.ProjectsOverviewBacklogColumnCollapsed,
+		false,
+	);
 	const projects = overview.data?.projects ?? [];
 	const projectNameById = useMemo(
 		() => new Map(projects.map((project) => [project.id, project.name] as const)),
@@ -51,6 +57,8 @@ export function ProjectsOverviewView({
 						cards={board.cardsByColumn[column.id]}
 						projectNameById={projectNameById}
 						onOpenCard={onOpenCard}
+						isCollapsed={column.id === "backlog" && isBacklogCollapsed}
+						onCollapsedChange={column.id === "backlog" ? setBacklogCollapsed : undefined}
 					/>
 				))}
 			</div>
