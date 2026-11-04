@@ -1244,6 +1244,42 @@ export const runtimeTaskChatMessagesResponseSchema = z.object({
 });
 export type RuntimeTaskChatMessagesResponse = z.infer<typeof runtimeTaskChatMessagesResponseSchema>;
 
+export const runtimeTaskHistoryRequestSchema = z.object({
+	taskId: z.string(),
+});
+export type RuntimeTaskHistoryRequest = z.infer<typeof runtimeTaskHistoryRequestSchema>;
+
+/** What a finished card's history view shows: request, outcome, facts, conversation, moves. */
+export const runtimeTaskHistorySchema = z.object({
+	taskId: z.string(),
+	title: z.string().nullable(),
+	prompt: z.string(),
+	images: z.array(runtimeTaskImageSchema).optional(),
+	agentId: runtimeAgentIdSchema.nullable(),
+	/** "last_reply" when the card reached Done without passing review: not presented as the outcome. */
+	outcome: z.object({ kind: z.enum(["result", "last_reply"]), text: z.string() }).nullable(),
+	facts: z.object({
+		startedAt: z.number().nullable(),
+		finishedAt: z.number().nullable(),
+		durationMs: z.number().nullable(),
+		questionCount: z.number().nullable(),
+		messageCount: z.number(),
+	}),
+	/** One per agent session, oldest first. */
+	runs: z.array(z.object({ startedAt: z.number().nullable(), messages: z.array(runtimeTaskChatMessageSchema) })),
+	movements: z.array(
+		z.object({ at: z.number(), from: runtimeBoardColumnIdSchema.nullable(), to: runtimeBoardColumnIdSchema }),
+	),
+});
+export type RuntimeTaskHistory = z.infer<typeof runtimeTaskHistorySchema>;
+
+export const runtimeTaskHistoryResponseSchema = z.object({
+	ok: z.boolean(),
+	history: runtimeTaskHistorySchema.nullable(),
+	error: z.string().optional(),
+});
+export type RuntimeTaskHistoryResponse = z.infer<typeof runtimeTaskHistoryResponseSchema>;
+
 export const runtimeTaskChatSendRequestSchema = z.object({
 	taskId: z.string(),
 	text: z.string(),

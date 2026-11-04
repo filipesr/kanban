@@ -44,9 +44,13 @@ import {
 import { isHomeAgentSessionId } from "../core/home-agent-session";
 import { resolveTaskTitle } from "../core/task-title.js";
 import { openInBrowser } from "../server/browser";
+import { getClaudeCodeProjectDirectory, readClaudeCodeTranscriptRuns } from "../server/claude-code-transcripts";
+import { buildTaskHistory } from "../server/task-history";
+import { readTaskEvents } from "../state/task-event-log";
+import { getWorkspaceDirectoryPath, loadWorkspaceBoardById, loadWorkspaceSessionsById } from "../state/workspace-state";
 import { buildRuntimeConfigResponse, resolveAgentCommand } from "../terminal/agent-registry";
 import type { TerminalSessionManager } from "../terminal/session-manager";
-import { resolveTaskCwd } from "../workspace/task-worktree";
+import { getTaskWorktreePath, resolveTaskCwd } from "../workspace/task-worktree";
 import { captureTaskTurnCheckpoint } from "../workspace/turn-checkpoints";
 import type { RuntimeTrpcContext, RuntimeTrpcWorkspaceScope } from "./app-router";
 
@@ -403,6 +407,29 @@ export function createRuntimeApi(deps: CreateRuntimeApiDependencies): RuntimeTrp
 				return {
 					ok: false,
 					messages: [],
+					error: message,
+				};
+			}
+		},
+		getTaskHistory: async (workspaceScope, input) => {
+			try {
+				return await buildTaskHistory(input.taskId, {
+					loadBoard: () => loadWorkspaceBoardById(workspaceScope.workspaceId),
+					loadSessions: () => loadWorkspaceSessionsById(workspaceScope.workspaceId),
+					loadEvents: () => readTaskEvents(getWorkspaceDirectoryPath(workspaceScope.workspaceId)),
+					loadClineMessages: async (taskId) =>
+						(await deps.getScopedClineTaskSessionService(workspaceScope)).loadTaskSessionMessages(taskId),
+					loadClaudeCodeRuns: (taskId) =>
+						readClaudeCodeTranscriptRuns(
+							taskId,
+							getClaudeCodeProjectDirectory(getTaskWorktreePath(workspaceScope.workspacePath, taskId)),
+						),
+				});
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				return {
+					ok: false,
+					history: null,
 					error: message,
 				};
 			}

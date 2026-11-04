@@ -164,7 +164,10 @@ export function createTaskEntryFromPersistedSession(
 	return entry;
 }
 
-function hydratePersistedSessionMessages(taskId: string, messages: ClineSdkPersistedMessage[]): ClineTaskMessage[] {
+export function hydratePersistedSessionMessages(
+	taskId: string,
+	messages: ClineSdkPersistedMessage[],
+): ClineTaskMessage[] {
 	const entry = createHydrationEntry(taskId);
 	for (const message of messages) {
 		hydratePersistedMessage(entry, taskId, message);

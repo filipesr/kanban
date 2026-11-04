@@ -45,6 +45,10 @@ vi.mock("@/components/detail-panels/cline-agent-chat-panel", () => ({
 	}),
 }));
 
+vi.mock("@/components/detail-panels/done-card-history-panel", () => ({
+	DoneCardHistoryPanel: () => <div data-testid="done-card-history-panel" />,
+}));
+
 vi.mock("@/components/detail-panels/column-context-panel", () => ({
 	ColumnContextPanel: () => <div data-testid="column-context-panel" />,
 }));
@@ -414,6 +418,37 @@ describe("CardDetailView", () => {
 		});
 
 		expect(container.querySelector('[data-testid="cline-agent-chat-panel"]')).toBeInstanceOf(HTMLDivElement);
+		expect(container.querySelector('[data-testid="agent-terminal-panel"]')).toBeNull();
+	});
+
+	it("shows the history panel and no chat composer for a Cline card in Done", async () => {
+		const selection = createSelection();
+		const trashColumn = selection.allColumns.find((column) => column.id === "trash");
+		expect(trashColumn).toBeDefined();
+		const doneSelection: CardSelection = { ...selection, column: trashColumn ?? selection.column };
+
+		await act(async () => {
+			root.render(
+				<CardDetailView
+					selection={doneSelection}
+					currentProjectId="workspace-1"
+					selectedAgentId="cline"
+					sessionSummary={null}
+					taskSessions={{}}
+					onSessionSummary={() => {}}
+					onCardSelect={() => {}}
+					onTaskDragEnd={() => {}}
+					onMoveToTrash={() => {}}
+					bottomTerminalOpen={false}
+					bottomTerminalTaskId={null}
+					bottomTerminalSummary={null}
+					onBottomTerminalClose={() => {}}
+				/>,
+			);
+		});
+
+		expect(container.querySelector('[data-testid="done-card-history-panel"]')).toBeInstanceOf(HTMLDivElement);
+		expect(container.querySelector('[data-testid="cline-agent-chat-panel"]')).toBeNull();
 		expect(container.querySelector('[data-testid="agent-terminal-panel"]')).toBeNull();
 	});
 

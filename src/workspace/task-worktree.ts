@@ -128,7 +128,7 @@ function getTrashedTaskPatchesRootPath(): string {
 	return join(getRuntimeHomePath(), KANBAN_TRASHED_TASK_PATCHES_DIR_NAME);
 }
 
-function getTaskWorktreePath(repoPath: string, taskId: string): string {
+export function getTaskWorktreePath(repoPath: string, taskId: string): string {
 	const workspaceLabel = getWorkspaceFolderLabelForWorktreePath(repoPath);
 	return join(getWorktreesRootPath(taskId), workspaceLabel);
 }
